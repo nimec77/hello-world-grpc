@@ -1,0 +1,26 @@
+[package]
+name = "hello-world-grpc"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["Your Name <your.email@example.com>"]
+description = "A simple gRPC Hello World service in Rust"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+tokio = { version = "1.47", features = ["full"] }
+tonic = "0.12"
+prost = "0.13"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+config = "0.14"
+tokio-stream = "0.1"
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[[bin]]
+name = "hello-world-grpc"
+path = "src/main.rs"

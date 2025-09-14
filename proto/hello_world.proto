@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package hello_world;
+
+// Placeholder proto file for build.rs
+// Will be properly implemented in Phase 2
+
+service Placeholder {
+  rpc Placeholder (PlaceholderRequest) returns (PlaceholderReply);
+}
+
+message PlaceholderRequest {
+  string placeholder = 1;
+}
+
+message PlaceholderReply {
+  string message = 1;
+}

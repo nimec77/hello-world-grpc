@@ -1,11 +1,21 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
 # IDE
-.vscode
-.idea
+.vscode/
+.idea/
+*.swp
+*.swo
 
+# OS
+.DS_Store
+Thumbs.db
 
-# env
+# Environment
 .env
 
-# Cargo
-Cargo.lock
-target/
+# Proto generated files
+src/proto/
