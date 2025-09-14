@@ -9,17 +9,17 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 tokio = { version = "1.47", features = ["full"] }
-tonic = "0.12"
-prost = "0.13"
+tonic = "0.14.2"
+prost = "0.14.1"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
-config = "0.14"
+config = "0.15.15"
 tokio-stream = "0.1"
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-prost-build = "0.14.2"
 
 [[bin]]
 name = "hello-world-grpc"
