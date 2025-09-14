@@ -5,7 +5,7 @@
 | Phase | Status | Progress | Last Updated | Notes |
 |-------|--------|----------|--------------|-------|
 | 🚀 Phase 1: Foundation | ✅ Completed | 100% | 2025-09-14 | Project setup complete, dependencies updated to latest versions |
-| 🏗️ Phase 2: Core gRPC | 🔄 In Progress | 50% | 2025-09-14 | Iterations 2.1-2.2 complete: Schema + Domain models implemented |
+| 🏗️ Phase 2: Core gRPC | 🔄 In Progress | 75% | 2025-09-14 | Iterations 2.1-2.3 complete: Schema + Domain + Service implemented |
 | 📡 Phase 3: Monitoring | ⏳ Pending | 0% | - | Health checks and logging |
 | ⚙️ Phase 4: Configuration | ⏳ Pending | 0% | - | Environment-based config |
 | 🧪 Phase 5: Testing | ⏳ Pending | 0% | - | Integration tests and validation |
@@ -74,16 +74,17 @@
 
 **Testing**: ✅ `cargo test` passes all domain validation tests
 
-### Iteration 2.3: Basic gRPC Service
-- [ ] Create `src/services/hello_world.rs`
-- [ ] Implement `GreeterService` struct
-- [ ] Implement `say_hello` method with:
-  - Request validation using domain types
-  - Business logic (greeting generation)
-  - Proper error mapping to gRPC Status codes
-- [ ] Add basic request/response logging
+### Iteration 2.3: Basic gRPC Service ✅ COMPLETED
+- [x] Create `src/services/hello_world.rs`
+- [x] Implement `GreeterService` struct with Default trait
+- [x] Implement `say_hello` method with:
+  - Request validation using domain types (`PersonName`)
+  - Business logic (greeting generation with `GreetingMessage`)
+  - Proper error mapping to gRPC Status codes (InvalidArgument)
+- [x] Add structured logging with tracing (request/response/errors)
+- [x] Add comprehensive unit tests (4 test cases)
 
-**Testing**: Service compiles and implements required traits
+**Testing**: ✅ Service compiles, implements required traits, all 11 tests pass
 
 ### Iteration 2.4: Server Setup
 - [ ] Create `src/main.rs` with:
