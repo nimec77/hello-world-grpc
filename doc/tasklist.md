@@ -5,7 +5,7 @@
 | Phase | Status | Progress | Last Updated | Notes |
 |-------|--------|----------|--------------|-------|
 | 🚀 Phase 1: Foundation | ✅ Completed | 100% | 2025-09-14 | Project setup complete, dependencies updated to latest versions |
-| 🏗️ Phase 2: Core gRPC | 🔄 In Progress | 25% | 2025-09-14 | Iteration 2.1 complete: Protocol Buffer schema implemented |
+| 🏗️ Phase 2: Core gRPC | 🔄 In Progress | 50% | 2025-09-14 | Iterations 2.1-2.2 complete: Schema + Domain models implemented |
 | 📡 Phase 3: Monitoring | ⏳ Pending | 0% | - | Health checks and logging |
 | ⚙️ Phase 4: Configuration | ⏳ Pending | 0% | - | Environment-based config |
 | 🧪 Phase 5: Testing | ⏳ Pending | 0% | - | Integration tests and validation |
@@ -64,15 +64,15 @@
 
 **Testing**: ✅ `cargo build` generates gRPC code without errors
 
-### Iteration 2.2: Domain Models
-- [ ] Create `src/lib.rs` with module structure
-- [ ] Implement domain types:
-  - `PersonName` with validation
-  - `GreetingMessage` wrapper
-- [ ] Add domain validation logic with proper error handling
-- [ ] Write unit tests for domain validation
+### Iteration 2.2: Domain Models ✅ COMPLETED
+- [x] Create `src/lib.rs` with module structure
+- [x] Implement domain types:
+  - `PersonName` with validation (non-empty, trimmed, max 100 chars)
+  - `GreetingMessage` wrapper with business logic
+- [x] Add domain validation logic with proper error handling
+- [x] Write unit tests for domain validation (7 tests + 2 doc tests)
 
-**Testing**: `cargo test` passes all domain validation tests
+**Testing**: ✅ `cargo test` passes all domain validation tests
 
 ### Iteration 2.3: Basic gRPC Service
 - [ ] Create `src/services/hello_world.rs`
