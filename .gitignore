@@ -3,3 +3,10 @@
 .idea
 .cursorrules
 .cursor
+
+# env
+.env
+
+# Cargo
+Cargo.lock
+target/
