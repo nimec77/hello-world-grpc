@@ -2,17 +2,20 @@ syntax = "proto3";
 
 package hello_world;
 
-// Placeholder proto file for build.rs
-// Will be properly implemented in Phase 2
+// Hello World gRPC service definition
+// Implements basic greeting functionality with name validation
 
-service Placeholder {
-  rpc Placeholder (PlaceholderRequest) returns (PlaceholderReply);
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply);
 }
 
-message PlaceholderRequest {
-  string placeholder = 1;
+// The request message containing the user's name
+message HelloRequest {
+  string name = 1;
 }
 
-message PlaceholderReply {
+// The response message containing the greetings
+message HelloReply {
   string message = 1;
 }

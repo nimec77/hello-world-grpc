@@ -5,7 +5,7 @@
 | Phase | Status | Progress | Last Updated | Notes |
 |-------|--------|----------|--------------|-------|
 | 🚀 Phase 1: Foundation | ✅ Completed | 100% | 2025-09-14 | Project setup complete, dependencies updated to latest versions |
-| 🏗️ Phase 2: Core gRPC | ⏳ Pending | 0% | - | Hello World service implementation |
+| 🏗️ Phase 2: Core gRPC | 🔄 In Progress | 25% | 2025-09-14 | Iteration 2.1 complete: Protocol Buffer schema implemented |
 | 📡 Phase 3: Monitoring | ⏳ Pending | 0% | - | Health checks and logging |
 | ⚙️ Phase 4: Configuration | ⏳ Pending | 0% | - | Environment-based config |
 | 🧪 Phase 5: Testing | ⏳ Pending | 0% | - | Integration tests and validation |
@@ -54,15 +54,15 @@
 ## 🏗️ Phase 2: Core gRPC Implementation
 *Goal: Working Hello World gRPC service*
 
-### Iteration 2.1: Protocol Buffer Schema
-- [ ] Create `proto/hello_world.proto` with:
+### Iteration 2.1: Protocol Buffer Schema ✅ COMPLETED
+- [x] Create `proto/hello_world.proto` with:
   - `Greeter` service definition
   - `HelloRequest` message (name field)
   - `HelloReply` message (message field)
   - Basic unary RPC: `SayHello`
-- [ ] Configure build.rs for code generation
+- [x] Configure build.rs for code generation
 
-**Testing**: `cargo build` generates gRPC code without errors
+**Testing**: ✅ `cargo build` generates gRPC code without errors
 
 ### Iteration 2.2: Domain Models
 - [ ] Create `src/lib.rs` with module structure
