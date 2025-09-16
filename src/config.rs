@@ -1,7 +1,10 @@
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
-use std::{fmt::{self, Display}, net::SocketAddr, str::FromStr};
-
+use std::{
+    fmt::{self, Display},
+    net::SocketAddr,
+    str::FromStr,
+};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -28,7 +31,44 @@ impl FromStr for LogFormat {
             "json" => Ok(LogFormat::Json),
             _ => Err(anyhow::anyhow!("Invalid log format: {}", s)),
         }
-    }    
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl Display for LogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogLevel::Trace => write!(f, "trace"),
+            LogLevel::Debug => write!(f, "debug"),
+            LogLevel::Info => write!(f, "info"),
+            LogLevel::Warn => write!(f, "warn"),
+            LogLevel::Error => write!(f, "error"),
+        }
+    }
+}
+
+impl FromStr for LogLevel {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "trace" => Ok(LogLevel::Trace),
+            "debug" => Ok(LogLevel::Debug),
+            "info" => Ok(LogLevel::Info),
+            "warn" => Ok(LogLevel::Warn),
+            "error" => Ok(LogLevel::Error),
+            _ => Err(anyhow::anyhow!("Invalid log level: {}", s)),
+        }
+    }
 }
 
 /// Main application configuration
@@ -48,7 +88,7 @@ pub struct ServerConfig {
 /// Logging-related configuration
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LoggingConfig {
-    pub level: String,
+    pub level: LogLevel,
     pub format: LogFormat,
 }
 
@@ -60,7 +100,7 @@ impl Default for AppConfig {
                 health_port: 8081,
             },
             logging: LoggingConfig {
-                level: "info".to_string(),
+                level: LogLevel::Info,
                 format: LogFormat::Pretty,
             },
         }
@@ -86,14 +126,7 @@ impl AppConfig {
             );
         }
 
-        // Validate log level
-        match self.logging.level.as_str() {
-            "trace" | "debug" | "info" | "warn" | "error" => {}
-            _ => anyhow::bail!(
-                "Invalid log level '{}', must be one of: trace, debug, info, warn, error",
-                self.logging.level
-            ),
-        }
+        // Log level validation is now handled by the LogLevel enum
 
         Ok(())
     }
@@ -156,9 +189,15 @@ mod tests {
     fn test_config_validation_log_level() {
         let mut config = AppConfig::default();
 
-        // Valid log levels should pass
-        for level in &["trace", "debug", "info", "warn", "error"] {
-            config.logging.level = level.to_string();
+        // Valid log levels should pass (enum guarantees validity)
+        for level in &[
+            LogLevel::Trace,
+            LogLevel::Debug,
+            LogLevel::Info,
+            LogLevel::Warn,
+            LogLevel::Error,
+        ] {
+            config.logging.level = level.clone();
             assert!(
                 config.validate().is_ok(),
                 "Log level {} should be valid",
@@ -166,9 +205,7 @@ mod tests {
             );
         }
 
-        // Invalid log level should fail
-        config.logging.level = "invalid".to_string();
-        assert!(config.validate().is_err());
+        // No need to test invalid levels since enum prevents invalid values
     }
 
     #[test]
@@ -184,6 +221,32 @@ mod tests {
                 format
             );
         }
+    }
+
+    #[test]
+    fn test_log_level_from_str() {
+        // Valid log levels
+        assert_eq!(LogLevel::Trace, "trace".parse().unwrap());
+        assert_eq!(LogLevel::Debug, "debug".parse().unwrap());
+        assert_eq!(LogLevel::Info, "info".parse().unwrap());
+        assert_eq!(LogLevel::Warn, "warn".parse().unwrap());
+        assert_eq!(LogLevel::Error, "error".parse().unwrap());
+
+        // Case insensitive
+        assert_eq!(LogLevel::Info, "INFO".parse().unwrap());
+        assert_eq!(LogLevel::Error, "Error".parse().unwrap());
+
+        // Invalid level should fail
+        assert!("invalid".parse::<LogLevel>().is_err());
+    }
+
+    #[test]
+    fn test_log_level_display() {
+        assert_eq!(LogLevel::Trace.to_string(), "trace");
+        assert_eq!(LogLevel::Debug.to_string(), "debug");
+        assert_eq!(LogLevel::Info.to_string(), "info");
+        assert_eq!(LogLevel::Warn.to_string(), "warn");
+        assert_eq!(LogLevel::Error.to_string(), "error");
     }
 
     #[test]

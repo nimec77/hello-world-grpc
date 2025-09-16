@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
 /// Initialize structured logging with configuration-based setup
 fn init_logging(config: &LoggingConfig) -> Result<()> {
     let env_filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(&config.level))
+        .or_else(|_| EnvFilter::try_new(config.level.to_string()))
         .context("Failed to initialize log filter")?;
 
     match config.format {
