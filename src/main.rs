@@ -5,7 +5,7 @@ use tonic_health::server::health_reporter;
 use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use hello_world_grpc::config::{load_config, LoggingConfig};
+use hello_world_grpc::config::{load_config, LogFormat, LoggingConfig};
 use hello_world_grpc::services::hello_world::{greeter_server::GreeterServer, GreeterService};
 use hello_world_grpc::utils::{start_health_server, SimpleMetrics};
 
@@ -97,8 +97,8 @@ fn init_logging(config: &LoggingConfig) -> Result<()> {
         .or_else(|_| EnvFilter::try_new(&config.level))
         .context("Failed to initialize log filter")?;
 
-    match config.format.as_str() {
-        "json" => {
+    match config.format {
+        LogFormat::Json => {
             // Production: JSON format for log aggregation
             tracing_subscriber::registry()
                 .with(env_filter)
@@ -111,7 +111,7 @@ fn init_logging(config: &LoggingConfig) -> Result<()> {
                 )
                 .init();
         }
-        "pretty" => {
+        LogFormat::Pretty => {
             // Development: Human-readable format
             tracing_subscriber::registry()
                 .with(env_filter)
@@ -122,9 +122,6 @@ fn init_logging(config: &LoggingConfig) -> Result<()> {
                         .with_thread_ids(false),
                 )
                 .init();
-        }
-        _ => {
-            anyhow::bail!("Invalid logging format: {}", config.format);
         }
     }
 

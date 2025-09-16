@@ -1,6 +1,35 @@
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use std::{fmt::{self, Display}, net::SocketAddr, str::FromStr};
+
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    Pretty,
+    Json,
+}
+
+impl Display for LogFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogFormat::Pretty => write!(f, "pretty"),
+            LogFormat::Json => write!(f, "json"),
+        }
+    }
+}
+
+impl FromStr for LogFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "pretty" => Ok(LogFormat::Pretty),
+            "json" => Ok(LogFormat::Json),
+            _ => Err(anyhow::anyhow!("Invalid log format: {}", s)),
+        }
+    }    
+}
 
 /// Main application configuration
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -20,7 +49,7 @@ pub struct ServerConfig {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LoggingConfig {
     pub level: String,
-    pub format: String,
+    pub format: LogFormat,
 }
 
 impl Default for AppConfig {
@@ -32,7 +61,7 @@ impl Default for AppConfig {
             },
             logging: LoggingConfig {
                 level: "info".to_string(),
-                format: "pretty".to_string(),
+                format: LogFormat::Pretty,
             },
         }
     }
@@ -63,15 +92,6 @@ impl AppConfig {
             _ => anyhow::bail!(
                 "Invalid log level '{}', must be one of: trace, debug, info, warn, error",
                 self.logging.level
-            ),
-        }
-
-        // Validate log format
-        match self.logging.format.as_str() {
-            "pretty" | "json" => {}
-            _ => anyhow::bail!(
-                "Invalid log format '{}', must be one of: pretty, json",
-                self.logging.format
             ),
         }
 
@@ -156,18 +176,14 @@ mod tests {
         let mut config = AppConfig::default();
 
         // Valid log formats should pass
-        for format in &["pretty", "json"] {
-            config.logging.format = format.to_string();
+        for format in &[LogFormat::Pretty, LogFormat::Json] {
+            config.logging.format = format.to_owned();
             assert!(
                 config.validate().is_ok(),
                 "Log format {} should be valid",
                 format
             );
         }
-
-        // Invalid log format should fail
-        config.logging.format = "invalid".to_string();
-        assert!(config.validate().is_err());
     }
 
     #[test]
