@@ -1,6 +1,7 @@
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument, warn};
+use tracing::{info, warn};
 
+use crate::utils::{extract_client_info, RequestTimer};
 use crate::{GreetingMessage, PersonName};
 
 // Include the generated protobuf types
@@ -17,44 +18,39 @@ impl greeter_server::Greeter for GreeterService {
     /// Handles SayHello RPC requests with domain validation
     ///
     /// Validates the incoming name, generates a greeting, and returns the response.
-    /// All requests are logged with structured data for observability.
-    #[instrument(skip(self), fields(client_addr = %request.remote_addr().map(|addr| addr.to_string()).unwrap_or_else(|| "unknown".to_string())))]
+    /// All requests are logged with structured data for observability including
+    /// request ID and duration tracking.
     async fn say_hello(
         &self,
         request: Request<HelloRequest>,
     ) -> std::result::Result<Response<HelloReply>, Status> {
-        let client_addr = request
-            .remote_addr()
-            .map(|addr| addr.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        // Extract client info and start request timing
+        let client_info = extract_client_info(&request);
+        let timer = RequestTimer::start(client_info.request_id);
 
         let hello_request = request.into_inner();
         let request_name = &hello_request.name;
 
+        // Log request start with structured fields
         info!(
-            method = "say_hello",
-            client_addr = client_addr,
-            request_name = request_name,
+            request_id = %client_info.request_id,
+            method = "SayHello",
+            client_addr = %client_info.addr,
             "Processing greeting request"
         );
 
         // Domain validation: convert raw request to validated domain type
         let person_name = match PersonName::new(request_name) {
-            Ok(name) => {
-                info!(
-                    method = "say_hello",
-                    validated_name = name.as_str(),
-                    "Name validation successful"
-                );
-                name
-            }
+            Ok(name) => name,
             Err(validation_error) => {
                 warn!(
-                    method = "say_hello",
-                    client_addr = client_addr,
-                    request_name = request_name,
+                    request_id = %client_info.request_id,
+                    method = "SayHello",
+                    client_addr = %client_info.addr,
                     error = %validation_error,
-                    "Name validation failed"
+                    input = request_name,
+                    duration_ms = timer.elapsed_ms(),
+                    "Invalid request data"
                 );
 
                 return Err(Status::invalid_argument(format!(
@@ -71,12 +67,14 @@ impl greeter_server::Greeter for GreeterService {
             message: greeting.as_str().to_string(),
         };
 
+        // Log successful completion with all context
         info!(
-            method = "say_hello",
-            client_addr = client_addr,
-            validated_name = person_name.as_str(),
-            response_message = greeting.as_str(),
-            "Greeting request completed successfully"
+            request_id = %client_info.request_id,
+            method = "SayHello",
+            client_addr = %client_info.addr,
+            name = person_name.as_str(),
+            duration_ms = timer.elapsed_ms(),
+            "Successfully processed greeting request"
         );
 
         Ok(Response::new(reply))

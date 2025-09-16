@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
 
     // Create the gRPC service instance
     let greeter_service = GreeterService;
-    
+
     // Configure the server address
     let addr = "127.0.0.1:50051".parse()?;
     info!("gRPC server listening on {}", addr);
