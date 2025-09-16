@@ -6,7 +6,7 @@
 |-------|--------|----------|--------------|-------|
 | 🚀 Phase 1: Foundation | ✅ Completed | 100% | 2025-09-14 | Project setup complete, dependencies updated to latest versions |
 | 🏗️ Phase 2: Core gRPC | ✅ Completed | 100% | 2025-09-14 | All iterations complete: Working gRPC server with domain validation |
-| 📡 Phase 3: Monitoring | 🔄 In Progress | 67% | 2025-09-16 | Structured logging and metrics completed |
+| 📡 Phase 3: Monitoring | ✅ Completed | 100% | 2025-09-16 | All iterations complete: Logging, metrics, and health checks |
 | ⚙️ Phase 4: Configuration | ⏳ Pending | 0% | - | Environment-based config |
 | 🧪 Phase 5: Testing | ⏳ Pending | 0% | - | Integration tests and validation |
 | 🎯 Phase 6: Production | ⏳ Pending | 0% | - | Graceful shutdown and error handling |
@@ -133,27 +133,27 @@
 
 **Testing**: ✅ Metrics are collected and logged correctly, background task spawned
 
-### Iteration 3.3: Health Checks
-- [ ] Add gRPC health check service
-- [ ] Implement HTTP health endpoint on port 8081
-- [ ] Create health check response with:
-  - Service status
-  - Timestamp
-  - Version information
-- [ ] Add health endpoints to server startup
+### Iteration 3.3: Health Checks ✅ COMPLETED
+- [x] Add gRPC health check service (tonic-health integration)
+- [x] Implement HTTP health endpoint on port 8081
+- [x] Create health check response with:
+  - Service status ("healthy")
+  - Timestamp (RFC3339 format)
+  - Version information (from Cargo.toml)
+- [x] Add health endpoints to server startup (both gRPC and HTTP)
 
-**Testing**: 
-- gRPC health check responds with SERVING
-- HTTP GET /health returns 200 OK with JSON
+**Testing**: ✅
+- gRPC health check integrated with tonic-health service
+- HTTP GET /health returns 200 OK with JSON response
 
-### Phase 3 Summary 🔄 IN PROGRESS
+### Phase 3 Summary ✅ COMPLETED
 - ✅ **Structured Logging**: Complete request tracking with UUID, client address, duration (2025-09-16)
 - ✅ **Metrics Collection**: Thread-safe atomic counters with periodic logging every 60s (2025-09-16)
-- ⏳ **Health Checks**: Pending - gRPC and HTTP health endpoints
-- ✅ **Dependencies**: Added uuid crate for request ID generation
-- ✅ **Validation**: All 13 tests passing, server runs successfully with background metrics task
+- ✅ **Health Checks**: Both gRPC and HTTP health endpoints implemented (2025-09-16)
+- ✅ **Dependencies**: Added uuid, tonic-health, hyper, hyper-util, chrono
+- ✅ **Validation**: All 13 tests passing, health endpoints tested successfully
 
-**Ready for Iteration 3.3**: Health Checks implementation
+**Ready for Phase 4**: Configuration Management
 
 ---
 

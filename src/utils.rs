@@ -1,8 +1,15 @@
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Request as HyperRequest, Response as HyperResponse, StatusCode};
+use hyper_util::rt::TokioIo;
+use tokio::net::TcpListener;
 use tonic::Request;
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 /// Client information extracted from gRPC requests
@@ -126,5 +133,51 @@ impl SimpleMetrics {
             avg_duration_ms = avg_duration,
             "Server metrics summary"
         );
+    }
+}
+
+/// HTTP health check endpoint handler
+///
+/// Returns JSON health status including service information, timestamp, and version.
+/// Designed for load balancers and monitoring systems.
+async fn health_handler(_req: HyperRequest<hyper::body::Incoming>) -> Result<HyperResponse<String>, Infallible> {
+    let health_status = serde_json::json!({
+        "status": "healthy",
+        "service": "hello-world-grpc",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "version": env!("CARGO_PKG_VERSION")
+    });
+
+    let response = HyperResponse::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(health_status.to_string())
+        .unwrap();
+
+    Ok(response)
+}
+
+/// Start HTTP health check server
+///
+/// Binds to the specified port and serves health check responses.
+/// Runs in a separate async task to avoid blocking the main gRPC server.
+pub async fn start_health_server(port: u16) -> anyhow::Result<()> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = TcpListener::bind(&addr).await?;
+
+    info!(port = port, "HTTP health check server started");
+
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(health_handler))
+                .await
+            {
+                error!(error = %err, "Error serving connection");
+            }
+        });
     }
 }
