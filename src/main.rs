@@ -1,9 +1,11 @@
 use anyhow::Result;
+use std::time::Duration;
 use tonic::transport::Server;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use hello_world_grpc::services::hello_world::{greeter_server::GreeterServer, GreeterService};
+use hello_world_grpc::utils::SimpleMetrics;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -12,12 +14,28 @@ async fn main() -> Result<()> {
 
     info!("Starting Hello World gRPC Server");
 
-    // Create the gRPC service instance
-    let greeter_service = GreeterService;
+    // Create metrics collection instance
+    let metrics = SimpleMetrics::new();
+
+    // Create the gRPC service instance with metrics
+    let greeter_service = GreeterService::new(metrics.clone());
 
     // Configure the server address
     let addr = "127.0.0.1:50051".parse()?;
     info!("gRPC server listening on {}", addr);
+
+    // Start periodic metrics logging task
+    let metrics_clone = metrics.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+
+        loop {
+            interval.tick().await;
+            metrics_clone.log_summary();
+        }
+    });
+
+    info!("Started periodic metrics logging (every 60 seconds)");
 
     // Build and start the gRPC server
     Server::builder()

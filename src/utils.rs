@@ -1,5 +1,8 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 use tonic::Request;
+use tracing::info;
 use uuid::Uuid;
 
 /// Client information extracted from gRPC requests
@@ -53,5 +56,75 @@ impl RequestTimer {
     /// Get the request ID associated with this timer
     pub fn request_id(&self) -> Uuid {
         self.request_id
+    }
+}
+
+/// Simple metrics collection with atomic counters
+///
+/// Tracks basic request statistics for observability without external dependencies.
+/// Thread-safe using atomic operations for concurrent access.
+#[derive(Debug)]
+pub struct SimpleMetrics {
+    /// Total number of requests received
+    pub requests_total: AtomicU64,
+    /// Number of successful requests
+    pub requests_success: AtomicU64,
+    /// Number of failed requests
+    pub requests_error: AtomicU64,
+    /// Total duration of all requests in milliseconds
+    pub total_duration_ms: AtomicU64,
+}
+
+impl SimpleMetrics {
+    /// Create a new metrics instance
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            requests_total: AtomicU64::new(0),
+            requests_success: AtomicU64::new(0),
+            requests_error: AtomicU64::new(0),
+            total_duration_ms: AtomicU64::new(0),
+        })
+    }
+
+    /// Record a new request with its duration
+    pub fn record_request(&self, duration_ms: u64) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.total_duration_ms
+            .fetch_add(duration_ms, Ordering::Relaxed);
+    }
+
+    /// Record a successful request
+    pub fn record_success(&self) {
+        self.requests_success.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a failed request
+    pub fn record_error(&self) {
+        self.requests_error.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Log current metrics summary
+    pub fn log_summary(&self) {
+        let total = self.requests_total.load(Ordering::Relaxed);
+        let success = self.requests_success.load(Ordering::Relaxed);
+        let errors = self.requests_error.load(Ordering::Relaxed);
+        let total_duration = self.total_duration_ms.load(Ordering::Relaxed);
+
+        let avg_duration = if total > 0 { total_duration / total } else { 0 };
+
+        let success_rate = if total > 0 {
+            (success as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        info!(
+            requests_total = total,
+            requests_success = success,
+            requests_error = errors,
+            success_rate = success_rate,
+            avg_duration_ms = avg_duration,
+            "Server metrics summary"
+        );
     }
 }

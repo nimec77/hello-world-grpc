@@ -1,7 +1,8 @@
+use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{info, warn};
 
-use crate::utils::{extract_client_info, RequestTimer};
+use crate::utils::{extract_client_info, RequestTimer, SimpleMetrics};
 use crate::{GreetingMessage, PersonName};
 
 // Include the generated protobuf types
@@ -9,9 +10,19 @@ tonic::include_proto!("hello_world");
 
 /// gRPC service implementation for the Hello World Greeter service
 ///
-/// Provides domain-validated greeting functionality with structured logging.
-#[derive(Debug, Default)]
-pub struct GreeterService;
+/// Provides domain-validated greeting functionality with structured logging
+/// and metrics collection.
+#[derive(Debug)]
+pub struct GreeterService {
+    metrics: Arc<SimpleMetrics>,
+}
+
+impl GreeterService {
+    /// Create a new GreeterService with metrics collection
+    pub fn new(metrics: Arc<SimpleMetrics>) -> Self {
+        Self { metrics }
+    }
+}
 
 #[tonic::async_trait]
 impl greeter_server::Greeter for GreeterService {
@@ -43,13 +54,19 @@ impl greeter_server::Greeter for GreeterService {
         let person_name = match PersonName::new(request_name) {
             Ok(name) => name,
             Err(validation_error) => {
+                let duration = timer.elapsed_ms();
+
+                // Record metrics for failed request
+                self.metrics.record_request(duration);
+                self.metrics.record_error();
+
                 warn!(
                     request_id = %client_info.request_id,
                     method = "SayHello",
                     client_addr = %client_info.addr,
                     error = %validation_error,
                     input = request_name,
-                    duration_ms = timer.elapsed_ms(),
+                    duration_ms = duration,
                     "Invalid request data"
                 );
 
@@ -67,13 +84,19 @@ impl greeter_server::Greeter for GreeterService {
             message: greeting.as_str().to_string(),
         };
 
+        let duration = timer.elapsed_ms();
+
+        // Record metrics for successful request
+        self.metrics.record_request(duration);
+        self.metrics.record_success();
+
         // Log successful completion with all context
         info!(
             request_id = %client_info.request_id,
             method = "SayHello",
             client_addr = %client_info.addr,
             name = person_name.as_str(),
-            duration_ms = timer.elapsed_ms(),
+            duration_ms = duration,
             "Successfully processed greeting request"
         );
 
@@ -85,11 +108,13 @@ impl greeter_server::Greeter for GreeterService {
 mod tests {
     use super::greeter_server::Greeter;
     use super::*;
+    use crate::utils::SimpleMetrics;
     use tonic::Request;
 
     #[tokio::test]
     async fn test_say_hello_valid_request() {
-        let service = GreeterService;
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics);
         let request = Request::new(HelloRequest {
             name: "Alice".to_string(),
         });
@@ -102,7 +127,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_say_hello_trims_whitespace() {
-        let service = GreeterService;
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics);
         let request = Request::new(HelloRequest {
             name: "  Bob  ".to_string(),
         });
@@ -115,7 +141,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_say_hello_empty_name_fails() {
-        let service = GreeterService;
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics);
         let request = Request::new(HelloRequest {
             name: "".to_string(),
         });
@@ -130,7 +157,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_say_hello_too_long_name_fails() {
-        let service = GreeterService;
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics);
         let long_name = "a".repeat(101);
         let request = Request::new(HelloRequest { name: long_name });
 

@@ -6,7 +6,7 @@
 |-------|--------|----------|--------------|-------|
 | 🚀 Phase 1: Foundation | ✅ Completed | 100% | 2025-09-14 | Project setup complete, dependencies updated to latest versions |
 | 🏗️ Phase 2: Core gRPC | ✅ Completed | 100% | 2025-09-14 | All iterations complete: Working gRPC server with domain validation |
-| 📡 Phase 3: Monitoring | ⏳ Pending | 0% | - | Health checks and logging |
+| 📡 Phase 3: Monitoring | 🔄 In Progress | 67% | 2025-09-16 | Structured logging and metrics completed |
 | ⚙️ Phase 4: Configuration | ⏳ Pending | 0% | - | Environment-based config |
 | 🧪 Phase 5: Testing | ⏳ Pending | 0% | - | Integration tests and validation |
 | 🎯 Phase 6: Production | ⏳ Pending | 0% | - | Graceful shutdown and error handling |
@@ -110,28 +110,28 @@
 ## 📡 Phase 3: Monitoring & Observability
 *Goal: Production-ready monitoring and logging*
 
-### Iteration 3.1: Structured Logging
-- [ ] Create `src/utils.rs` for logging utilities
-- [ ] Implement structured logging with:
-  - Request ID generation
-  - Client address extraction
-  - Duration tracking
-  - Consistent log format
-- [ ] Add tracing to all service methods
-- [ ] Configure log levels and formatting
+### Iteration 3.1: Structured Logging ✅ COMPLETED
+- [x] Create `src/utils.rs` for logging utilities
+- [x] Implement structured logging with:
+  - Request ID generation (UUID)
+  - Client address extraction (`ClientInfo` struct)
+  - Duration tracking (`RequestTimer` utility)
+  - Consistent log format with structured fields
+- [x] Add tracing to all service methods with enhanced logging
+- [x] Configure log levels and formatting
 
-**Testing**: Server logs structured data for all requests
+**Testing**: ✅ Server logs structured data for all requests with request_id, duration_ms, client_addr
 
-### Iteration 3.2: Metrics Collection
-- [ ] Implement `SimpleMetrics` struct with atomic counters:
-  - Total requests
+### Iteration 3.2: Metrics Collection ✅ COMPLETED
+- [x] Implement `SimpleMetrics` struct with atomic counters:
+  - Total requests (`AtomicU64`)
   - Successful requests
   - Error requests
-  - Average duration
-- [ ] Add metrics tracking to service methods
-- [ ] Add periodic metrics logging (every 60s)
+  - Total duration for average calculation
+- [x] Add metrics tracking to service methods (both success and error paths)
+- [x] Add periodic metrics logging (every 60s) with background task
 
-**Testing**: Metrics are collected and logged correctly
+**Testing**: ✅ Metrics are collected and logged correctly, background task spawned
 
 ### Iteration 3.3: Health Checks
 - [ ] Add gRPC health check service
@@ -145,6 +145,15 @@
 **Testing**: 
 - gRPC health check responds with SERVING
 - HTTP GET /health returns 200 OK with JSON
+
+### Phase 3 Summary 🔄 IN PROGRESS
+- ✅ **Structured Logging**: Complete request tracking with UUID, client address, duration (2025-09-16)
+- ✅ **Metrics Collection**: Thread-safe atomic counters with periodic logging every 60s (2025-09-16)
+- ⏳ **Health Checks**: Pending - gRPC and HTTP health endpoints
+- ✅ **Dependencies**: Added uuid crate for request ID generation
+- ✅ **Validation**: All 13 tests passing, server runs successfully with background metrics task
+
+**Ready for Iteration 3.3**: Health Checks implementation
 
 ---
 
