@@ -100,15 +100,16 @@ fn init_logging(config: &LoggingConfig) -> Result<()> {
     match config.format {
         LogFormat::Json => {
             // Production: JSON format for log aggregation
+            let json_layer = fmt::layer()
+                .json()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_span_events(fmt::format::FmtSpan::CLOSE)
+                .with_ansi(false); // Disable colors for JSON output
+
             tracing_subscriber::registry()
                 .with(env_filter)
-                .with(
-                    fmt::layer()
-                        .with_target(true)
-                        .with_thread_ids(true)
-                        .with_span_events(fmt::format::FmtSpan::CLOSE)
-                        .with_ansi(false), // Disable colors for JSON output
-                )
+                .with(json_layer)
                 .init();
         }
         LogFormat::Pretty => {

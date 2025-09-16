@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     Pretty,
@@ -143,7 +143,11 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         // Add config file if it exists (optional)
         .add_source(File::with_name("config/settings").required(false))
         // Override with environment variables (APP_SERVER__GRPC_ADDRESS, etc.)
-        .add_source(Environment::with_prefix("APP").separator("__"))
+        .add_source(
+            Environment::with_prefix("APP")
+                .separator("__")
+                .try_parsing(true),
+        )
         .build()?;
 
     config.try_deserialize()
@@ -261,5 +265,145 @@ mod tests {
 
         let config = result.unwrap();
         assert!(config.validate().is_ok(), "Default config should be valid");
+    }
+
+    #[test]
+    fn test_config_crate_simple() {
+        // Simple test with minimal config to debug the config crate
+        use config::{Config, Environment};
+        use serde::Deserialize;
+
+        #[allow(dead_code)]
+        #[derive(Debug, Deserialize)]
+        struct SimpleConfig {
+            test_value: String,
+        }
+
+        // Test different env var patterns
+        println!("Testing different environment variable patterns:");
+
+        // Pattern 1: Original approach
+        std::env::set_var("APP_TEST_VALUE", "test123");
+        let result1 = Config::builder()
+            .add_source(Environment::with_prefix("APP").separator("__"))
+            .build()
+            .and_then(|c| c.try_deserialize::<SimpleConfig>());
+        println!(
+            "Pattern 1 (APP_TEST_VALUE with separator '__'): {:?}",
+            result1
+        );
+        std::env::remove_var("APP_TEST_VALUE");
+
+        // Pattern 2: Without separator but with underscore
+        std::env::set_var("APP_test_value", "test123");
+        let result2 = Config::builder()
+            .add_source(Environment::with_prefix("APP"))
+            .build()
+            .and_then(|c| c.try_deserialize::<SimpleConfig>());
+        println!(
+            "Pattern 2 (APP_test_value without separator): {:?}",
+            result2
+        );
+        std::env::remove_var("APP_test_value");
+
+        // Pattern 3: Exactly as shown in docs
+        std::env::set_var("APP__test_value", "test123");
+        let result3 = Config::builder()
+            .add_source(Environment::with_prefix("APP").separator("__"))
+            .build()
+            .and_then(|c| c.try_deserialize::<SimpleConfig>());
+        println!(
+            "Pattern 3 (APP__test_value with separator '__'): {:?}",
+            result3
+        );
+        std::env::remove_var("APP__test_value");
+
+        // Pattern 4: All caps with underscores
+        std::env::set_var("APP_TEST_VALUE", "test123");
+        let result4 = Config::builder()
+            .add_source(Environment::with_prefix("APP"))
+            .build()
+            .and_then(|c| c.try_deserialize::<SimpleConfig>());
+        println!(
+            "Pattern 4 (APP_TEST_VALUE without separator): {:?}",
+            result4
+        );
+        std::env::remove_var("APP_TEST_VALUE");
+    }
+
+    #[test]
+    fn test_environment_variable_overrides() {
+        // Set environment variables - test multiple patterns
+        // Pattern from earlier test that worked: APP__test_value
+        std::env::set_var("APP__LOGGING__LEVEL", "debug");
+        std::env::set_var("APP__LOGGING__FORMAT", "json");
+        std::env::set_var("APP__SERVER__GRPC_ADDRESS", "0.0.0.0:9999");
+        std::env::set_var("APP__SERVER__HEALTH_PORT", "9090");
+
+        // Debug: Print all env vars with APP prefix
+        println!("Environment variables with APP prefix:");
+        for (key, value) in std::env::vars() {
+            if key.starts_with("APP_") {
+                println!("  {} = {}", key, value);
+            }
+        }
+
+        // Test config crate behavior step by step
+        println!("Testing config crate with just env vars:");
+        let env_only_config = Config::builder()
+            .add_source(Environment::with_prefix("APP").separator("__"))
+            .build()
+            .unwrap();
+
+        println!("Raw config from env vars: {:?}", env_only_config);
+
+        let result = load_config();
+        assert!(
+            result.is_ok(),
+            "Config loading should succeed: {:?}",
+            result.err()
+        );
+
+        let config = result.unwrap();
+
+        println!("Loaded config: {:?}", config);
+
+        // Test environment-only config first
+        println!("Testing just environment config:");
+        let env_config_result = Config::builder()
+            .add_source(
+                Environment::with_prefix("APP")
+                    .separator("__")
+                    .try_parsing(true),
+            )
+            .build()
+            .and_then(|c| c.try_deserialize::<AppConfig>());
+        println!("Env-only config result: {:?}", env_config_result);
+
+        // Test simple string values first (should work if env vars are being read at all)
+        assert_eq!(
+            config.server.grpc_address, "0.0.0.0:9999",
+            "gRPC address not overridden"
+        );
+        assert_eq!(
+            config.server.health_port, 9090,
+            "Health port not overridden"
+        );
+        assert_eq!(
+            config.logging.level,
+            LogLevel::Debug,
+            "Log level not overridden"
+        );
+        assert_eq!(
+            config.logging.format,
+            LogFormat::Json,
+            "Log format not overridden"
+        );
+
+        // Clean up
+        std::env::remove_var("APP__LOGGING__LEVEL");
+        std::env::remove_var("APP__LOGGING__FORMAT");
+        std::env::remove_var("APP__SERVER__GRPC_ADDRESS");
+        std::env::remove_var("APP__SERVER__HEALTH_PORT");
     }
 }
