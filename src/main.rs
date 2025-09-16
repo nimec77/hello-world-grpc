@@ -1,19 +1,34 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::time::Duration;
 use tonic::transport::Server;
 use tonic_health::server::health_reporter;
 use tracing::info;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+use hello_world_grpc::config::{load_config, LoggingConfig};
 use hello_world_grpc::services::hello_world::{greeter_server::GreeterServer, GreeterService};
 use hello_world_grpc::utils::{start_health_server, SimpleMetrics};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize structured logging
-    init_logging()?;
+    // Load and validate configuration early
+    let config = load_config().context("Failed to load configuration")?;
 
-    info!("Starting Hello World gRPC Server");
+    config
+        .validate()
+        .context("Configuration validation failed")?;
+
+    // Initialize logging with config
+    init_logging(&config.logging)?;
+
+    info!(
+        grpc_address = %config.server.grpc_address,
+        health_port = config.server.health_port,
+        log_level = %config.logging.level,
+        log_format = %config.logging.format,
+        version = env!("CARGO_PKG_VERSION"),
+        "Starting Hello World gRPC Server with configuration"
+    );
 
     // Create metrics collection instance
     let metrics = SimpleMetrics::new();
@@ -27,13 +42,18 @@ async fn main() -> Result<()> {
         .set_serving::<GreeterServer<GreeterService>>()
         .await;
 
-    // Configure the server address
-    let addr = "127.0.0.1:50051".parse()?;
-    let health_port = 8081;
-    info!("gRPC server listening on {}", addr);
+    // Parse server address from configuration
+    let addr = config
+        .server
+        .grpc_address
+        .parse()
+        .context("Failed to parse gRPC address")?;
+    let health_port = config.server.health_port;
+
+    info!(address = %addr, "gRPC server will listen on");
     info!(
-        "HTTP health check server will start on port {}",
-        health_port
+        port = health_port,
+        "HTTP health check server will start on port"
     );
 
     // Start periodic metrics logging task
@@ -58,6 +78,8 @@ async fn main() -> Result<()> {
 
     info!("Started health check servers (gRPC + HTTP)");
 
+    info!("All services configured, starting gRPC server");
+
     // Build and start the gRPC server with health service
     Server::builder()
         .add_service(health_service)
@@ -65,19 +87,46 @@ async fn main() -> Result<()> {
         .serve(addr)
         .await?;
 
+    info!("Server shut down gracefully");
     Ok(())
 }
 
-/// Initialize structured logging with environment-based configuration
-fn init_logging() -> Result<()> {
-    let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .map_err(|e| anyhow::anyhow!("Failed to initialize log filter: {}", e))?;
+/// Initialize structured logging with configuration-based setup
+fn init_logging(config: &LoggingConfig) -> Result<()> {
+    let env_filter = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(&config.level))
+        .context("Failed to initialize log filter")?;
 
-    tracing_subscriber::registry()
-        .with(fmt::layer().pretty())
-        .with(filter)
-        .init();
+    match config.format.as_str() {
+        "json" => {
+            // Production: JSON format for log aggregation
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(
+                    fmt::layer()
+                        .with_target(true)
+                        .with_thread_ids(true)
+                        .with_span_events(fmt::format::FmtSpan::CLOSE)
+                        .with_ansi(false), // Disable colors for JSON output
+                )
+                .init();
+        }
+        "pretty" => {
+            // Development: Human-readable format
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(
+                    fmt::layer()
+                        .pretty()
+                        .with_target(false)
+                        .with_thread_ids(false),
+                )
+                .init();
+        }
+        _ => {
+            anyhow::bail!("Invalid logging format: {}", config.format);
+        }
+    }
 
     Ok(())
 }

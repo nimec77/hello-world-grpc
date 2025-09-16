@@ -1,0 +1,11 @@
+# Example configuration file
+# Copy to config/settings.toml to use
+# Environment variables take precedence over this file
+
+[server]
+grpc_address = "127.0.0.1:50051"
+health_port = 8081
+
+[logging]
+level = "info"
+format = "pretty"
