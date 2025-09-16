@@ -1,12 +1,12 @@
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Request as HyperRequest, Response as HyperResponse, StatusCode};
+use hyper_util::rt::TokioIo;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request as HyperRequest, Response as HyperResponse, StatusCode};
-use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tonic::Request;
 use tracing::{error, info};
@@ -140,7 +140,9 @@ impl SimpleMetrics {
 ///
 /// Returns JSON health status including service information, timestamp, and version.
 /// Designed for load balancers and monitoring systems.
-async fn health_handler(_req: HyperRequest<hyper::body::Incoming>) -> Result<HyperResponse<String>, Infallible> {
+async fn health_handler(
+    _req: HyperRequest<hyper::body::Incoming>,
+) -> Result<HyperResponse<String>, Infallible> {
     let health_status = serde_json::json!({
         "status": "healthy",
         "service": "hello-world-grpc",

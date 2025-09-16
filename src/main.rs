@@ -20,18 +20,21 @@ async fn main() -> Result<()> {
 
     // Create the gRPC service instance with metrics
     let greeter_service = GreeterService::new(metrics.clone());
-    
+
     // Setup gRPC health check service
     let (health_reporter, health_service) = health_reporter();
     health_reporter
         .set_serving::<GreeterServer<GreeterService>>()
         .await;
-    
+
     // Configure the server address
     let addr = "127.0.0.1:50051".parse()?;
     let health_port = 8081;
     info!("gRPC server listening on {}", addr);
-    info!("HTTP health check server will start on port {}", health_port);
+    info!(
+        "HTTP health check server will start on port {}",
+        health_port
+    );
 
     // Start periodic metrics logging task
     let metrics_clone = metrics.clone();
