@@ -8,10 +8,11 @@ pub mod services {
 }
 
 /// File descriptor set for gRPC reflection
-pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hello_world_descriptor.bin"));
+pub const FILE_DESCRIPTOR_SET: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/hello_world_descriptor.bin"));
 
 // Domain models with validation
-use anyhow::Result;
+use crate::error::{AppError, AppResult};
 
 const MAX_NAME_LENGTH: usize = 100;
 
@@ -42,18 +43,18 @@ impl PersonName {
     /// assert!(PersonName::new("").is_err());
     /// assert!(PersonName::new("   ").is_err());
     /// ```
-    pub fn new(name: impl AsRef<str>) -> Result<Self> {
+    pub fn new(name: impl AsRef<str>) -> AppResult<Self> {
         let trimmed = name.as_ref().trim();
 
         if trimmed.is_empty() {
-            anyhow::bail!("Person name cannot be empty");
+            return Err(AppError::validation("Person name cannot be empty"));
         }
 
         if trimmed.len() > MAX_NAME_LENGTH {
-            anyhow::bail!(
+            return Err(AppError::validation(format!(
                 "Person name cannot exceed {MAX_NAME_LENGTH} characters, got {}",
                 trimmed.len()
-            );
+            )));
         }
 
         Ok(PersonName(trimmed.to_string()))

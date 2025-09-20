@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{info, warn};
 
+use crate::error::ErrorContext;
 use crate::utils::{extract_client_info, RequestTimer, SimpleMetrics};
 use crate::{GreetingMessage, PersonName};
 
@@ -51,9 +52,11 @@ impl greeter_server::Greeter for GreeterService {
         );
 
         // Domain validation: convert raw request to validated domain type
-        let person_name = match PersonName::new(request_name) {
+        let person_name = match PersonName::new(request_name).with_validation_context(|| {
+            format!("Failed to validate person name '{}'", request_name)
+        }) {
             Ok(name) => name,
-            Err(validation_error) => {
+            Err(app_error) => {
                 let duration = timer.elapsed_ms();
 
                 // Record metrics for failed request
@@ -64,16 +67,14 @@ impl greeter_server::Greeter for GreeterService {
                     request_id = %client_info.request_id,
                     method = "SayHello",
                     client_addr = %client_info.addr,
-                    error = %validation_error,
+                    error = %app_error,
                     input = request_name,
                     duration_ms = duration,
-                    "Invalid request data"
+                    "Request validation failed"
                 );
 
-                return Err(Status::invalid_argument(format!(
-                    "Invalid name: {}",
-                    validation_error
-                )));
+                // Convert AppError to gRPC Status (includes structured error logging)
+                return Err(Status::from(app_error));
             }
         };
 

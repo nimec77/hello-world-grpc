@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use std::time::Duration;
+use tokio::signal;
 use tonic::transport::Server;
 use tonic_health::server::health_reporter;
 use tonic_reflection::server::Builder as ReflectionBuilder;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use hello_world_grpc::config::{load_config, LogFormat, LoggingConfig};
@@ -89,15 +90,85 @@ async fn main() -> Result<()> {
 
     info!("gRPC reflection service enabled for service discovery");
 
-    // Build and start the gRPC server with all services
-    Server::builder()
+    // Build and start the gRPC server with graceful shutdown handling
+    let server = Server::builder()
         .add_service(health_service)
         .add_service(reflection_service)
-        .add_service(GreeterServer::new(greeter_service))
-        .serve(addr)
-        .await?;
+        .add_service(GreeterServer::new(greeter_service));
 
-    info!("Server shut down gracefully");
+    info!("Starting gRPC server with graceful shutdown support");
+
+    // Create graceful shutdown signal handler
+    let shutdown_signal = async {
+        // Handle different shutdown signals across platforms
+        let sigterm = async {
+            #[cfg(unix)]
+            {
+                signal::unix::signal(signal::unix::SignalKind::terminate())
+                    .expect("Failed to install SIGTERM handler")
+                    .recv()
+                    .await;
+            }
+            #[cfg(not(unix))]
+            {
+                // On Windows, only Ctrl+C is supported
+                std::future::pending::<()>().await;
+            }
+        };
+
+        let sigint = async {
+            signal::ctrl_c()
+                .await
+                .expect("Failed to install Ctrl+C handler");
+        };
+
+        tokio::select! {
+            _ = sigterm => {
+                info!("Received SIGTERM, initiating graceful shutdown");
+            },
+            _ = sigint => {
+                info!("Received Ctrl+C, initiating graceful shutdown");
+            },
+        }
+    };
+
+    // Start server with graceful shutdown and timeout handling
+    let shutdown_timeout = Duration::from_secs(30); // Give 30 seconds for graceful shutdown
+
+    // Wrap shutdown logic with timeout to prevent hanging indefinitely
+    let server_task = server.serve_with_shutdown(addr, shutdown_signal);
+
+    info!(
+        timeout_seconds = shutdown_timeout.as_secs(),
+        "gRPC server starting with graceful shutdown timeout"
+    );
+
+    // Race the server against a timeout after receiving shutdown signal
+    let shutdown_result = tokio::time::timeout(
+        shutdown_timeout + Duration::from_secs(35), // Extra buffer for signal handling
+        server_task,
+    )
+    .await;
+
+    match shutdown_result {
+        Ok(Ok(())) => {
+            info!("gRPC server shut down gracefully within timeout");
+        }
+        Ok(Err(e)) => {
+            warn!(error = %e, "Server encountered error during graceful shutdown");
+            return Err(e.into());
+        }
+        Err(_) => {
+            warn!(
+                timeout_seconds = shutdown_timeout.as_secs(),
+                "Server graceful shutdown exceeded timeout, forcing termination"
+            );
+            // Note: tonic's serve_with_shutdown handles this well, but we log the timeout
+            return Err(anyhow::anyhow!("Server shutdown timeout exceeded"));
+        }
+    }
+
+    info!("All services stopped gracefully");
     Ok(())
 }
 
