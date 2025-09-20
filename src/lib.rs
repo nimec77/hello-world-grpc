@@ -7,6 +7,9 @@ pub mod services {
     pub mod hello_world;
 }
 
+/// File descriptor set for gRPC reflection
+pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hello_world_descriptor.bin"));
+
 // Domain models with validation
 use anyhow::Result;
 

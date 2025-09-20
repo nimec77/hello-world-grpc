@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::time::Duration;
 use tonic::transport::Server;
 use tonic_health::server::health_reporter;
+use tonic_reflection::server::Builder as ReflectionBuilder;
 use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -80,9 +81,18 @@ async fn main() -> Result<()> {
 
     info!("All services configured, starting gRPC server");
 
-    // Build and start the gRPC server with health service
+    // Create reflection service for grpcurl support
+    let reflection_service = ReflectionBuilder::configure()
+        .register_encoded_file_descriptor_set(hello_world_grpc::FILE_DESCRIPTOR_SET)
+        .build_v1()
+        .context("Failed to create reflection service")?;
+
+    info!("gRPC reflection service enabled for service discovery");
+
+    // Build and start the gRPC server with all services
     Server::builder()
         .add_service(health_service)
+        .add_service(reflection_service)
         .add_service(GreeterServer::new(greeter_service))
         .serve(addr)
         .await?;
