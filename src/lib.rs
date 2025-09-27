@@ -152,6 +152,19 @@ impl StreamInterval {
         Ok(StreamInterval(interval))
     }
 
+
+    /// Returns the interval as a Duration
+    pub fn as_duration(&self) -> Duration {
+        self.0
+    }
+
+    /// Returns the interval in milliseconds
+    pub fn as_millis(&self) -> u128 {
+        self.0.as_millis()
+    }
+}
+
+impl Default for StreamInterval {
     /// Creates the default streaming interval (1 second)
     ///
     /// # Examples
@@ -162,20 +175,10 @@ impl StreamInterval {
     /// let default_interval = StreamInterval::default();
     /// assert_eq!(default_interval.as_duration(), Duration::from_secs(1));
     /// ```
-    pub fn default() -> Self {
+    fn default() -> Self {
         // Safe unwrap - default value is always valid
         StreamInterval::new(Duration::from_secs(DEFAULT_STREAM_INTERVAL_SECS))
             .expect("Default stream interval should always be valid")
-    }
-
-    /// Returns the interval as a Duration
-    pub fn as_duration(&self) -> Duration {
-        self.0
-    }
-
-    /// Returns the interval in milliseconds
-    pub fn as_millis(&self) -> u128 {
-        self.0.as_millis()
     }
 }
 
