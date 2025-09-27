@@ -80,6 +80,12 @@ pub struct SimpleMetrics {
     pub requests_error: AtomicU64,
     /// Total duration of all requests in milliseconds
     pub total_duration_ms: AtomicU64,
+    /// Number of active streaming connections
+    pub active_streams: AtomicU64,
+    /// Total number of streams started
+    pub streams_started: AtomicU64,
+    /// Total number of streams completed (includes disconnections)
+    pub streams_completed: AtomicU64,
 }
 
 impl SimpleMetrics {
@@ -90,6 +96,9 @@ impl SimpleMetrics {
             requests_success: AtomicU64::new(0),
             requests_error: AtomicU64::new(0),
             total_duration_ms: AtomicU64::new(0),
+            active_streams: AtomicU64::new(0),
+            streams_started: AtomicU64::new(0),
+            streams_completed: AtomicU64::new(0),
         })
     }
 
@@ -110,12 +119,27 @@ impl SimpleMetrics {
         self.requests_error.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Record a new streaming connection started
+    pub fn record_stream_started(&self) {
+        self.streams_started.fetch_add(1, Ordering::Relaxed);
+        self.active_streams.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a streaming connection completed (includes disconnections)
+    pub fn record_stream_completed(&self) {
+        self.streams_completed.fetch_add(1, Ordering::Relaxed);
+        self.active_streams.fetch_sub(1, Ordering::Relaxed);
+    }
+
     /// Log current metrics summary
     pub fn log_summary(&self) {
         let total = self.requests_total.load(Ordering::Relaxed);
         let success = self.requests_success.load(Ordering::Relaxed);
         let errors = self.requests_error.load(Ordering::Relaxed);
         let total_duration = self.total_duration_ms.load(Ordering::Relaxed);
+        let active_streams = self.active_streams.load(Ordering::Relaxed);
+        let streams_started = self.streams_started.load(Ordering::Relaxed);
+        let streams_completed = self.streams_completed.load(Ordering::Relaxed);
 
         let avg_duration = if total > 0 { total_duration / total } else { 0 };
 
@@ -131,6 +155,9 @@ impl SimpleMetrics {
             requests_error = errors,
             success_rate = success_rate,
             avg_duration_ms = avg_duration,
+            active_streams = active_streams,
+            streams_started = streams_started,
+            streams_completed = streams_completed,
             "Server metrics summary"
         );
     }

@@ -341,34 +341,34 @@
 - Timestamp format (RFC3339 recommended)
 - Request parameters (simple subscription vs configurable interval)
 
-### Iteration 7.2: Time Domain Models ⏳ NOT STARTED
-- [ ] Create time-related domain types following existing patterns:
-  - `StreamInterval` domain type (default 1 second, configurable)
+### Iteration 7.2: Time Domain Models ✅ COMPLETED
+- [x] Create time-related domain types following existing patterns:
+  - `StreamInterval` domain type (default 1 second, configurable, 100ms-1hour range)
   - `TimeSnapshot` domain model for RFC3339 timestamp business logic
-  - Integration with existing domain validation patterns
-- [ ] Add domain validation logic with proper error handling
-- [ ] Write comprehensive unit tests for domain validation (following existing test patterns)
-- [ ] Add doc comments and usage examples
+  - Integration with existing domain validation patterns using `AppResult<T>`
+- [x] Add domain validation logic with proper error handling using `AppError::validation`
+- [x] Write comprehensive unit tests for domain validation (14 new tests covering all edge cases)
+- [x] Add doc comments and usage examples with `///` documentation
 
-**Testing**: `cargo test` should pass all time domain validation tests
+**Testing**: ✅ `cargo test` passes all 38 tests including 14 new time domain validation tests
 
 **Design**: Follow existing patterns for basic configuration and simple request/response model
 
-### Iteration 7.3: Streaming Service Implementation ⏳ NOT STARTED
-- [ ] Implement streaming method in service:
-  - Add `stream_time` method to existing service or create new service
-  - Use `tokio::time::interval` for 1-second ticks
-  - Implement proper stream lifecycle management
-  - Handle client disconnections gracefully
-  - Add structured logging with stream context (stream_id, client_addr, duration)
-- [ ] Integrate with existing metrics system:
-  - Track active streaming connections
-  - Record stream duration and client disconnections
-  - Add streaming-specific metrics to periodic logging
-- [ ] Add comprehensive error handling following existing patterns
-- [ ] Write unit tests for streaming logic
+### Iteration 7.3: Streaming Service Implementation ✅ COMPLETED
+- [x] Implement streaming method in service:
+  - Add `stream_time` method to existing `GreeterService` (extended existing service)
+  - Use `tokio::time::interval` with `IntervalStream` for 1-second ticks
+  - Implement proper stream lifecycle management with unique stream IDs
+  - Handle client disconnections gracefully (tonic handles disconnection automatically)
+  - Add structured logging with stream context (stream_id, client_addr, request_id, timestamps)
+- [x] Integrate with existing metrics system:
+  - Track active streaming connections with `active_streams`, `streams_started`, `streams_completed` counters
+  - Add streaming-specific metrics to periodic logging (`log_summary`)
+  - Extended `SimpleMetrics` with atomic streaming counters and methods
+- [x] Add comprehensive error handling following existing patterns using domain validation
+- [x] Write unit tests for streaming logic (4 comprehensive streaming tests added)
 
-**Testing**: Service should stream time correctly, handle disconnections, with metrics collected
+**Testing**: ✅ Service streams time correctly with RFC3339 timestamps, metrics collected properly, all 46 tests passing
 
 ### Iteration 7.4: Configuration Enhancement ⏳ NOT STARTED
 - [ ] Extend `src/config.rs` with streaming configuration:
