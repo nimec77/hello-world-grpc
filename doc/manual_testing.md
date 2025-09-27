@@ -44,6 +44,7 @@ This script will:
 - ✅ Test environment variable configuration  
 - ✅ Test gRPC communication (if grpcurl available)
 - ✅ Test concurrent requests
+- ✅ Test streaming functionality (if grpcurl available)
 - ✅ Validate log formats
 - ✅ Test health endpoints
 
@@ -371,6 +372,122 @@ wait
 
 ---
 
+## 7. Server-Side Streaming Testing
+
+**Objective**: Validate real-time time streaming functionality and concurrent client handling
+
+### Streaming Endpoint Testing
+
+#### A. Basic Streaming Test (grpcurl)
+
+1. **Start server**:
+   ```bash
+   cargo run &
+   ```
+
+2. **Test streaming endpoint**:
+   ```bash
+   # Test basic streaming (will stream time updates every second)
+   timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime
+   ```
+
+3. **Expected output**:
+   ```json
+   {
+     "timestamp": "2025-09-27T10:30:45.123Z"
+   }
+   {
+     "timestamp": "2025-09-27T10:30:46.124Z"
+   }
+   {
+     "timestamp": "2025-09-27T10:30:47.125Z"
+   }
+   ```
+
+#### B. Concurrent Streaming Clients
+
+1. **Test multiple concurrent streams**:
+   ```bash
+   # Start 3 concurrent streaming clients
+   timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > stream1.log &
+   timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > stream2.log &
+   timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > stream3.log &
+   
+   # Wait for completion
+   wait
+   
+   # Verify all clients received messages
+   echo "Stream 1 messages: $(grep -c timestamp stream1.log)"
+   echo "Stream 2 messages: $(grep -c timestamp stream2.log)"
+   echo "Stream 3 messages: $(grep -c timestamp stream3.log)"
+   ```
+
+#### C. Mixed Operations (Streaming + Unary)
+
+1. **Start streaming and make unary requests**:
+   ```bash
+   # Start streaming in background
+   timeout 15s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > mixed_stream.log &
+   
+   # Make unary requests while streaming
+   for i in {1..5}; do
+     grpcurl -plaintext -d "{\"name\": \"MixedTest$i\"}" localhost:50051 hello_world.Greeter/SayHello
+     sleep 2
+   done
+   
+   # Check results
+   echo "Streaming messages: $(grep -c timestamp mixed_stream.log)"
+   ```
+
+### Streaming Configuration Testing
+
+#### A. Custom Streaming Interval
+
+1. **Test with different intervals**:
+   ```bash
+   # Test 2-second intervals
+   export APP__STREAMING__INTERVAL_SECONDS=2
+   cargo run &
+   
+   timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime
+   ```
+
+   **Expected**: Messages should arrive every 2 seconds instead of 1 second
+
+#### B. Connection Limits
+
+1. **Test maximum connections** (default: 100):
+   ```bash
+   export APP__STREAMING__MAX_CONNECTIONS=5
+   cargo run &
+   
+   # Try to exceed the limit (start 6+ concurrent streams)
+   for i in {1..6}; do
+     timeout 15s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > stream_limit_$i.log &
+   done
+   ```
+
+#### C. Stream Timeout Testing
+
+1. **Test stream timeout configuration**:
+   ```bash
+   export APP__STREAMING__TIMEOUT_SECONDS=5
+   cargo run &
+   
+   # Start a long-running stream (should timeout after 5 seconds based on config)
+   timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime
+   ```
+
+### Success Criteria:
+- ✅ Streaming endpoint produces time updates at configured intervals
+- ✅ Multiple concurrent clients can stream simultaneously  
+- ✅ Streaming works alongside unary operations
+- ✅ Configuration changes are respected (interval, limits, timeouts)
+- ✅ RFC3339 timestamp format is correct
+- ✅ Client disconnections are handled gracefully
+
+---
+
 ## Advanced Testing with Python Client
 
 ### Using the Test Client
@@ -391,8 +508,64 @@ The Python test client (`scripts/test_client.py`) provides programmatic testing 
 # Load testing
 ./scripts/test_client.py --test load --load-duration 30 --load-rps 20
 
-# All tests
+# Streaming tests
+./scripts/test_client.py --test streaming --streaming-duration 10
+./scripts/test_client.py --test streaming-concurrent --streaming-clients 5
+./scripts/test_client.py --test streaming-mixed --streaming-duration 15
+
+# All tests (including streaming)
 ./scripts/test_client.py --test all --output-json results.json
+```
+
+### Streaming Test Examples
+
+#### Basic Streaming Test:
+```bash
+./scripts/test_client.py --test streaming --streaming-duration 10
+```
+
+**Expected output**:
+```
+🕐 Testing basic streaming for 10s...
+  📨 Message 1: 2025-09-27T10:30:45.123Z
+  📨 Message 2: 2025-09-27T10:30:46.124Z  
+  📨 Message 3: 2025-09-27T10:30:47.125Z
+  ...
+📊 Basic streaming test completed:
+  Messages received: 10
+  Connection successful: True
+  Avg interval: 1000ms
+```
+
+#### Concurrent Streaming Test:
+```bash
+./scripts/test_client.py --test streaming-concurrent --streaming-clients 3 --streaming-duration 8
+```
+
+**Expected output**:
+```
+⚡ Testing 3 concurrent streaming clients for 8s...
+✅ Client 0: 8 messages
+✅ Client 1: 8 messages  
+✅ Client 2: 8 messages
+📊 Concurrent streaming test completed:
+  Successful clients: 3/3
+  Total messages: 24
+  Avg messages/client: 8.0
+```
+
+#### Mixed Operations Test:
+```bash
+./scripts/test_client.py --test streaming-mixed --streaming-duration 10
+```
+
+**Expected output**:
+```
+🔀 Testing mixed streaming + unary operations for 10s...
+📊 Mixed operations test completed:
+  Streaming messages: 10
+  Unary requests: 18/18
+  Streaming successful: True
 ```
 
 #### Expected Outputs:

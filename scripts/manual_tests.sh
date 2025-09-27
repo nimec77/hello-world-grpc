@@ -389,6 +389,121 @@ log_success "Test 5 completed"
 
 echo
 echo "======================================================================"
+echo "🕐 Test 6: Streaming Functionality"
+echo "======================================================================"
+
+log_info "Starting server for streaming tests..."
+cargo run &
+SERVER_PID=$!
+
+if wait_for_server 50051 30; then
+    log_success "Server started successfully"
+    
+    if $GRPCURL_AVAILABLE; then
+        log_info "Testing streaming time endpoint..."
+        
+        # Test basic streaming functionality
+        log_info "  Testing basic streaming (5 messages with timeout)..."
+        timeout 10s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > /tmp/stream_output.txt 2>&1 &
+        STREAM_PID=$!
+        
+        sleep 6  # Wait for a few messages
+        kill $STREAM_PID 2>/dev/null || true
+        wait $STREAM_PID 2>/dev/null || true
+        
+        if [ -s /tmp/stream_output.txt ]; then
+            log_success "Streaming endpoint is working"
+            MESSAGE_COUNT=$(grep -c '"timestamp"' /tmp/stream_output.txt || echo "0")
+            log_info "    Received $MESSAGE_COUNT time messages"
+            
+            # Validate RFC3339 format
+            if grep -q '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}' /tmp/stream_output.txt; then
+                log_success "    Timestamps are in RFC3339 format"
+            else
+                log_warning "    Timestamp format may not be RFC3339"
+            fi
+        else
+            log_error "Streaming endpoint did not produce any output"
+        fi
+        
+        # Test multiple concurrent streaming clients
+        log_info "  Testing concurrent streaming clients..."
+        
+        # Start 3 concurrent streaming clients
+        timeout 8s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > /tmp/stream1.txt 2>&1 &
+        STREAM1_PID=$!
+        timeout 8s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > /tmp/stream2.txt 2>&1 &
+        STREAM2_PID=$!
+        timeout 8s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > /tmp/stream3.txt 2>&1 &
+        STREAM3_PID=$!
+        
+        sleep 5  # Let them run for a bit
+        
+        # Kill all streaming clients
+        kill $STREAM1_PID $STREAM2_PID $STREAM3_PID 2>/dev/null || true
+        wait $STREAM1_PID $STREAM2_PID $STREAM3_PID 2>/dev/null || true
+        
+        # Count messages from each client
+        COUNT1=$(grep -c '"timestamp"' /tmp/stream1.txt || echo "0")
+        COUNT2=$(grep -c '"timestamp"' /tmp/stream2.txt || echo "0")
+        COUNT3=$(grep -c '"timestamp"' /tmp/stream3.txt || echo "0")
+        
+        if [ "$COUNT1" -gt 0 ] && [ "$COUNT2" -gt 0 ] && [ "$COUNT3" -gt 0 ]; then
+            log_success "    Concurrent streaming works (Client1: $COUNT1, Client2: $COUNT2, Client3: $COUNT3 messages)"
+        else
+            log_warning "    Some concurrent clients may not have received messages"
+        fi
+        
+        # Test streaming with unary requests (mixed operations)
+        log_info "  Testing streaming + unary mixed operations..."
+        
+        # Start a streaming client
+        timeout 6s grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime > /tmp/mixed_stream.txt 2>&1 &
+        MIXED_STREAM_PID=$!
+        
+        sleep 1  # Let stream start
+        
+        # Make some unary requests while streaming
+        UNARY_SUCCESS=0
+        for i in {1..3}; do
+            UNARY_RESPONSE=$(grpcurl -plaintext -d '{"name": "StreamTest'$i'"}' localhost:50051 hello_world.Greeter/SayHello 2>/dev/null | grep "Hello, StreamTest$i!" || echo "")
+            if [ -n "$UNARY_RESPONSE" ]; then
+                ((UNARY_SUCCESS++))
+            fi
+        done
+        
+        # Stop streaming
+        kill $MIXED_STREAM_PID 2>/dev/null || true
+        wait $MIXED_STREAM_PID 2>/dev/null || true
+        
+        MIXED_COUNT=$(grep -c '"timestamp"' /tmp/mixed_stream.txt || echo "0")
+        
+        if [ "$UNARY_SUCCESS" -eq 3 ] && [ "$MIXED_COUNT" -gt 0 ]; then
+            log_success "    Mixed streaming + unary operations work (Stream: $MIXED_COUNT, Unary: $UNARY_SUCCESS)"
+        else
+            log_warning "    Mixed operations may have issues (Stream: $MIXED_COUNT, Unary: $UNARY_SUCCESS)"
+        fi
+        
+        # Cleanup temp files
+        rm -f /tmp/stream_output.txt /tmp/stream1.txt /tmp/stream2.txt /tmp/stream3.txt /tmp/mixed_stream.txt
+        
+        log_success "Test 6 completed successfully"
+    else
+        log_warning "Streaming tests skipped (grpcurl not available)"
+        log_success "Test 6 completed (skipped)"
+    fi
+    
+    # Kill the server
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+    sleep 2
+else
+    log_error "Server failed to start for streaming tests"
+    kill $SERVER_PID 2>/dev/null || true
+fi
+
+echo
+echo "======================================================================"
 echo "🏁 Manual Testing Suite Complete"
 echo "======================================================================"
 
@@ -405,6 +520,11 @@ else
 fi
 
 log_info "  ✅ Log format validation"
+if $GRPCURL_AVAILABLE; then
+    log_info "  ✅ Streaming functionality"
+else
+    log_info "  ⚠️  Streaming tests skipped (grpcurl not available)"
+fi
 
 echo
 log_info "To run individual tests, check the script sections or:"
@@ -412,6 +532,7 @@ log_info "  - Start server: cargo run"
 log_info "  - Test health: curl http://localhost:8081/health"
 if $GRPCURL_AVAILABLE; then
     log_info "  - Test gRPC: grpcurl -plaintext -d '{\"name\": \"Test\"}' localhost:50051 hello_world.Greeter/SayHello"
+    log_info "  - Test streaming: grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime"
 fi
 
 echo

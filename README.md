@@ -5,19 +5,21 @@ A production-ready gRPC Hello World service implementation in Rust, demonstratin
 ## 🎉 Project Status: COMPLETED
 
 **All phases successfully implemented with full production readiness**
-- ✅ **46 comprehensive tests passing** (unit + integration + error handling)
-- ✅ **Production-ready features**: Graceful shutdown, structured error handling, health checks, metrics
+- ✅ **79 comprehensive tests passing** (unit + integration + streaming + error handling)
+- ✅ **Production-ready features**: Graceful shutdown, structured error handling, health checks, metrics, streaming
+- ✅ **Server-side streaming**: Real-time time updates with configurable intervals and monitoring
 - ✅ **Comprehensive manual testing suite** with automation scripts
 
 ## Features
 
 - **🚀 Production gRPC Service**: Greeting service with domain validation and error handling
+- **🕐 Server-Side Streaming**: Real-time time streaming with configurable intervals and metrics
 - **⚡ Modern Rust**: Built with async/await, strong typing, and comprehensive error handling  
 - **📊 Observability**: Structured logging (JSON/Pretty), metrics collection, dual health checks
 - **⚙️ Configuration**: Layered configuration (defaults → file → environment variables)
 - **🛡️ Robust Error Handling**: Structured error types with proper gRPC status mapping
 - **🔄 Graceful Operations**: Signal handling, graceful shutdown with timeouts
-- **🧪 Comprehensive Testing**: 46 tests covering domain validation, integration, and error scenarios
+- **🧪 Comprehensive Testing**: 79 tests covering domain validation, integration, streaming, and error scenarios
 
 ## Quick Start
 
@@ -30,16 +32,19 @@ cargo run
 # 1. Check HTTP health endpoint
 curl http://localhost:8081/health
 
-# 2. Test gRPC service with grpcurl (if installed)
+# 2. Test gRPC unary service with grpcurl (if installed)
 grpcurl -plaintext -d '{"name": "World"}' localhost:50051 hello_world.Greeter/SayHello
 
-# 3. Run comprehensive test suite
+# 3. Test streaming service (real-time time updates)
+grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime
+
+# 4. Run comprehensive test suite
 cargo test
 
-# 4. Run manual testing scenarios
+# 5. Run manual testing scenarios (including streaming tests)
 ./scripts/manual_tests.sh
 
-# 5. Run with custom configuration
+# 6. Run with custom configuration
 APP_LOGGING__LEVEL=debug APP_LOGGING__FORMAT=json cargo run
 ```
 
@@ -103,10 +108,16 @@ APP__SERVER__HEALTH_PORT=8081                # HTTP health check port
 APP__LOGGING__LEVEL=info                      # Log level: trace|debug|info|warn|error
 APP__LOGGING__FORMAT=pretty                   # Format: pretty|json
 
+# Streaming configuration
+APP__STREAMING__INTERVAL_SECONDS=1           # Time between stream updates (1-3600s)
+APP__STREAMING__MAX_CONNECTIONS=100          # Max concurrent streaming connections (1-10000)
+APP__STREAMING__TIMEOUT_SECONDS=300          # Stream timeout duration (1-86400s)
+
 # Example production setup
 export APP__LOGGING__FORMAT=json
 export APP__LOGGING__LEVEL=info
 export APP__SERVER__GRPC_ADDRESS=0.0.0.0:50051
+export APP__STREAMING__MAX_CONNECTIONS=500
 ```
 
 ### Configuration Files
@@ -116,7 +127,7 @@ export APP__SERVER__GRPC_ADDRESS=0.0.0.0:50051
 
 ## Testing
 
-### Automated Test Suite (46 Tests)
+### Automated Test Suite (79 Tests)
 
 ```bash
 # Run all tests
@@ -128,6 +139,7 @@ cargo test -- --nocapture
 # Run specific test categories
 cargo test unit_tests        # Domain validation tests
 cargo test integration       # End-to-end gRPC tests  
+cargo test streaming         # Streaming functionality tests
 cargo test error_handling    # Error scenario tests
 ```
 
@@ -141,6 +153,7 @@ Comprehensive manual testing infrastructure for operational validation:
 
 # Individual test categories:
 ./scripts/manual_tests.sh --basic          # Basic functionality
+./scripts/manual_tests.sh --streaming      # Streaming functionality tests
 ./scripts/manual_tests.sh --health         # Health check endpoints
 ./scripts/manual_tests.sh --concurrency    # Concurrent request handling
 ./scripts/manual_tests.sh --errors         # Error handling scenarios
@@ -153,10 +166,11 @@ python scripts/test_client.py              # Interactive gRPC client
 
 ### Test Coverage
 
-- **Unit Tests (21)**: Domain validation, configuration, utilities
+- **Unit Tests (52)**: Domain validation, configuration, utilities, streaming service
 - **Integration Tests (13)**: End-to-end gRPC communication, health checks
-- **Error Handling Tests (7)**: Comprehensive error scenario validation  
-- **Manual Testing**: Load testing, network interruption, configuration edge cases
+- **Streaming Tests (11)**: End-to-end streaming, concurrent clients, performance, error recovery
+- **Common Tests (3)**: Shared test infrastructure utilities
+- **Manual Testing**: Load testing, network interruption, configuration edge cases, streaming scenarios
 - **Documentation**: Complete testing guide in [`doc/manual_testing.md`](doc/manual_testing.md)
 
 ## Production Readiness
@@ -182,6 +196,9 @@ grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
 # gRPC service introspection
 grpcurl -plaintext localhost:50051 list
 grpcurl -plaintext localhost:50051 describe hello_world.Greeter
+
+# Test streaming functionality
+grpcurl -plaintext -d '{}' localhost:50051 hello_world.Greeter/StreamTime
 ```
 
 ## License

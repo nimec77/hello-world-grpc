@@ -32,6 +32,16 @@ class HelloReply:
     def __init__(self, message: str):
         self.message = message
 
+class TimeRequest:
+    """Simulated protobuf message for streaming time requests"""
+    def __init__(self):
+        pass
+
+class TimeResponse:
+    """Simulated protobuf message for streaming time responses"""
+    def __init__(self, timestamp: str):
+        self.timestamp = timestamp
+
 class MockGreeterStub:
     """Mock gRPC stub for demonstration - in real implementation would use generated code"""
     
@@ -54,6 +64,22 @@ class MockGreeterStub:
             raise grpc.RpcError("INVALID_ARGUMENT: Person name cannot exceed 100 characters")
         
         return HelloReply(f"Hello, {request.name.strip()}!")
+    
+    def StreamTime(self, request, timeout=None):
+        """Mock streaming implementation - in real code would call actual gRPC streaming service"""
+        if not self._simulate_connection:
+            raise grpc.RpcError("Connection failed")
+        
+        import datetime
+        def time_stream_generator():
+            # Simulate streaming time responses (1 per second)
+            for _ in range(100):  # Limit to prevent infinite loop in tests
+                current_time = datetime.datetime.now(datetime.timezone.utc)
+                timestamp = current_time.isoformat().replace('+00:00', 'Z')
+                yield TimeResponse(timestamp)
+                time.sleep(1.0)  # 1 second interval
+        
+        return time_stream_generator()
 
 def create_channel(address: str) -> grpc.Channel:
     """Create a gRPC channel to the server"""
@@ -267,15 +293,246 @@ def load_test(address: str, duration_seconds: int, requests_per_second: int) -> 
     
     return results
 
+def streaming_basic_test(address: str, duration_seconds: int = 10) -> dict:
+    """
+    Test basic streaming functionality
+    
+    Args:
+        address: Server address
+        duration_seconds: How long to collect streaming messages
+    
+    Returns:
+        Dictionary with streaming test results
+    """
+    print(f"🕐 Testing basic streaming for {duration_seconds}s...")
+    
+    results = {
+        'duration_seconds': duration_seconds,
+        'messages_received': 0,
+        'connection_successful': False,
+        'timestamps': [],
+        'avg_interval_ms': 0,
+        'errors': []
+    }
+    
+    start_time = time.time()
+    end_time = start_time + duration_seconds
+    last_message_time = None
+    intervals = []
+    
+    try:
+        with create_channel(address) as channel:
+            stub = MockGreeterStub(channel)
+            request = TimeRequest()
+            stream = stub.StreamTime(request, timeout=duration_seconds + 5)
+            results['connection_successful'] = True
+            
+            for response in stream:
+                current_time = time.time()
+                
+                if current_time >= end_time:
+                    break
+                    
+                results['messages_received'] += 1
+                results['timestamps'].append(response.timestamp)
+                
+                # Calculate interval between messages
+                if last_message_time:
+                    interval_ms = (current_time - last_message_time) * 1000
+                    intervals.append(interval_ms)
+                
+                last_message_time = current_time
+                print(f"  📨 Message {results['messages_received']}: {response.timestamp}")
+                
+                # Break if we've reached our target duration
+                if current_time >= end_time:
+                    break
+    
+    except Exception as e:
+        results['errors'].append(str(e))
+        print(f"❌ Streaming error: {e}")
+    
+    # Calculate statistics
+    if intervals:
+        results['avg_interval_ms'] = sum(intervals) / len(intervals)
+    
+    print(f"📊 Basic streaming test completed:")
+    print(f"  Messages received: {results['messages_received']}")
+    print(f"  Connection successful: {results['connection_successful']}")
+    if results['avg_interval_ms'] > 0:
+        print(f"  Average interval: {results['avg_interval_ms']:.0f}ms")
+    
+    return results
+
+def streaming_concurrent_test(address: str, num_clients: int = 3, duration_seconds: int = 8) -> dict:
+    """
+    Test concurrent streaming clients
+    
+    Args:
+        address: Server address
+        num_clients: Number of concurrent streaming clients
+        duration_seconds: How long each client should stream
+    
+    Returns:
+        Dictionary with concurrent streaming test results
+    """
+    print(f"⚡ Testing {num_clients} concurrent streaming clients for {duration_seconds}s...")
+    
+    results = {
+        'num_clients': num_clients,
+        'duration_seconds': duration_seconds,
+        'clients_successful': 0,
+        'clients_failed': 0,
+        'total_messages': 0,
+        'client_results': [],
+        'errors': []
+    }
+    
+    def single_client_stream(client_id: int):
+        client_results = {
+            'client_id': client_id,
+            'messages_received': 0,
+            'connection_successful': False,
+            'error': None
+        }
+        
+        try:
+            with create_channel(address) as channel:
+                stub = MockGreeterStub(channel)
+                request = TimeRequest()
+                stream = stub.StreamTime(request, timeout=duration_seconds + 5)
+                client_results['connection_successful'] = True
+                
+                start_time = time.time()
+                for response in stream:
+                    if time.time() - start_time >= duration_seconds:
+                        break
+                    client_results['messages_received'] += 1
+                    
+        except Exception as e:
+            client_results['error'] = str(e)
+        
+        return client_results
+    
+    # Run concurrent streaming clients
+    with ThreadPoolExecutor(max_workers=num_clients) as executor:
+        future_to_client = {
+            executor.submit(single_client_stream, i): i 
+            for i in range(num_clients)
+        }
+        
+        for future in as_completed(future_to_client):
+            client_results = future.result()
+            results['client_results'].append(client_results)
+            
+            if client_results['connection_successful'] and not client_results['error']:
+                results['clients_successful'] += 1
+                results['total_messages'] += client_results['messages_received']
+                print(f"✅ Client {client_results['client_id']}: {client_results['messages_received']} messages")
+            else:
+                results['clients_failed'] += 1
+                error_msg = client_results['error'] or "Connection failed"
+                results['errors'].append(f"Client {client_results['client_id']}: {error_msg}")
+                print(f"❌ Client {client_results['client_id']}: {error_msg}")
+    
+    print(f"📊 Concurrent streaming test completed:")
+    print(f"  Successful clients: {results['clients_successful']}/{num_clients}")
+    print(f"  Total messages: {results['total_messages']}")
+    print(f"  Avg messages per client: {results['total_messages']/num_clients:.1f}")
+    
+    return results
+
+def streaming_mixed_operations_test(address: str, duration_seconds: int = 10) -> dict:
+    """
+    Test streaming concurrent with unary requests
+    
+    Args:
+        address: Server address
+        duration_seconds: How long to run the mixed test
+    
+    Returns:
+        Dictionary with mixed operations test results
+    """
+    print(f"🔀 Testing mixed streaming + unary operations for {duration_seconds}s...")
+    
+    results = {
+        'duration_seconds': duration_seconds,
+        'streaming_messages': 0,
+        'unary_requests': 0,
+        'unary_successful': 0,
+        'streaming_successful': False,
+        'errors': []
+    }
+    
+    streaming_active = False
+    
+    def run_streaming():
+        nonlocal streaming_active
+        try:
+            with create_channel(address) as channel:
+                stub = MockGreeterStub(channel)
+                request = TimeRequest()
+                stream = stub.StreamTime(request, timeout=duration_seconds + 5)
+                streaming_active = True
+                results['streaming_successful'] = True
+                
+                start_time = time.time()
+                for response in stream:
+                    if time.time() - start_time >= duration_seconds:
+                        break
+                    results['streaming_messages'] += 1
+                    
+        except Exception as e:
+            results['errors'].append(f"Streaming: {str(e)}")
+        finally:
+            streaming_active = False
+    
+    # Start streaming in background
+    import threading
+    streaming_thread = threading.Thread(target=run_streaming)
+    streaming_thread.daemon = True
+    streaming_thread.start()
+    
+    # Give streaming time to start
+    time.sleep(1)
+    
+    # Make unary requests while streaming
+    start_time = time.time()
+    while time.time() - start_time < duration_seconds - 1:
+        try:
+            success, response, duration_ms = single_request_test(address, f"MixedTest{results['unary_requests']}")
+            results['unary_requests'] += 1
+            
+            if success:
+                results['unary_successful'] += 1
+            
+        except Exception as e:
+            results['errors'].append(f"Unary: {str(e)}")
+        
+        time.sleep(0.5)  # Make unary requests every 500ms
+    
+    # Wait for streaming to finish
+    streaming_thread.join(timeout=2)
+    
+    print(f"📊 Mixed operations test completed:")
+    print(f"  Streaming messages: {results['streaming_messages']}")
+    print(f"  Unary requests: {results['unary_successful']}/{results['unary_requests']}")
+    print(f"  Streaming successful: {results['streaming_successful']}")
+    
+    return results
+
 def main():
     parser = argparse.ArgumentParser(description='gRPC Test Client for Hello World Service')
     parser.add_argument('--address', default='localhost:50051', help='Server address')
-    parser.add_argument('--test', default='all', choices=['single', 'concurrent', 'errors', 'load', 'all'],
+    parser.add_argument('--test', default='all', 
+                       choices=['single', 'concurrent', 'errors', 'load', 'streaming', 'streaming-concurrent', 'streaming-mixed', 'all'],
                        help='Test type to run')
     parser.add_argument('--name', default='TestUser', help='Name for single request test')
     parser.add_argument('--concurrent', type=int, default=10, help='Number of concurrent requests')
     parser.add_argument('--load-duration', type=int, default=10, help='Load test duration in seconds')
     parser.add_argument('--load-rps', type=int, default=10, help='Load test requests per second')
+    parser.add_argument('--streaming-duration', type=int, default=10, help='Streaming test duration in seconds')
+    parser.add_argument('--streaming-clients', type=int, default=3, help='Number of concurrent streaming clients')
     parser.add_argument('--output-json', help='Output results to JSON file')
     
     args = parser.parse_args()
@@ -339,6 +596,45 @@ def main():
             results = load_test(args.address, args.load_duration, args.load_rps)
             
             all_results['load_test'] = results
+        
+        if args.test in ['streaming', 'all']:
+            print(f"\n🕐 Basic Streaming Test ({args.streaming_duration}s)")
+            print("-" * 30)
+            results = streaming_basic_test(args.address, args.streaming_duration)
+            
+            print(f"\n📊 Streaming Test Results:")
+            print(f"  Duration: {results['duration_seconds']}s")
+            print(f"  Messages received: {results['messages_received']}")
+            print(f"  Connection successful: {results['connection_successful']}")
+            if results['avg_interval_ms'] > 0:
+                print(f"  Avg interval: {results['avg_interval_ms']:.0f}ms")
+            
+            all_results['streaming_basic'] = results
+        
+        if args.test in ['streaming-concurrent', 'all']:
+            print(f"\n⚡ Concurrent Streaming Test ({args.streaming_clients} clients, {args.streaming_duration}s)")
+            print("-" * 30)
+            results = streaming_concurrent_test(args.address, args.streaming_clients, args.streaming_duration)
+            
+            print(f"\n📊 Concurrent Streaming Results:")
+            print(f"  Successful clients: {results['clients_successful']}/{results['num_clients']}")
+            print(f"  Total messages: {results['total_messages']}")
+            if results['num_clients'] > 0:
+                print(f"  Avg messages/client: {results['total_messages']/results['num_clients']:.1f}")
+            
+            all_results['streaming_concurrent'] = results
+        
+        if args.test in ['streaming-mixed', 'all']:
+            print(f"\n🔀 Mixed Operations Test (streaming + unary, {args.streaming_duration}s)")
+            print("-" * 30)
+            results = streaming_mixed_operations_test(args.address, args.streaming_duration)
+            
+            print(f"\n📊 Mixed Operations Results:")
+            print(f"  Streaming messages: {results['streaming_messages']}")
+            print(f"  Unary requests: {results['unary_successful']}/{results['unary_requests']}")
+            print(f"  Streaming successful: {results['streaming_successful']}")
+            
+            all_results['streaming_mixed'] = results
         
         # Output JSON results if requested
         if args.output_json:

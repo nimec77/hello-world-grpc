@@ -228,10 +228,14 @@ syntax = "proto3";
 
 package hello_world;
 
-// The greeting service definition
+// Hello World gRPC service definition
+// Implements basic greeting functionality with name validation
 service Greeter {
-  // Sends a greeting (unary RPC - simplest possible)
+  // Sends a greeting (unary RPC)
   rpc SayHello (HelloRequest) returns (HelloReply);
+  
+  // Streams current time updates (server-side streaming RPC)
+  rpc StreamTime (TimeRequest) returns (stream TimeResponse);
 }
 
 // The request message containing the user's name
@@ -242,6 +246,16 @@ message HelloRequest {
 // The response message containing the greetings
 message HelloReply {
   string message = 1;
+}
+
+// Time streaming request (empty for simple subscription)
+message TimeRequest {
+  // Empty message - simple subscription model
+}
+
+// Time streaming response containing RFC3339 timestamp
+message TimeResponse {
+  string timestamp = 1;  // Current time in RFC3339 format
 }
 ```
 
@@ -283,15 +297,57 @@ impl GreetingMessage {
         self.0
     }
 }
+
+// Time streaming domain types
+#[derive(Debug, Clone)]
+pub struct TimeSnapshot {
+    timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+impl TimeSnapshot {
+    pub fn now() -> Self {
+        Self {
+            timestamp: chrono::Utc::now(),
+        }
+    }
+    
+    pub fn to_rfc3339(&self) -> String {
+        self.timestamp.to_rfc3339()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamInterval {
+    millis: u64,
+}
+
+impl StreamInterval {
+    pub fn new(seconds: u64) -> anyhow::Result<Self> {
+        if seconds == 0 || seconds > 3600 {
+            anyhow::bail!("Stream interval must be 1-3600 seconds");
+        }
+        Ok(Self { millis: seconds * 1000 })
+    }
+    
+    pub fn as_millis(&self) -> u64 {
+        self.millis
+    }
+}
+
+impl Default for StreamInterval {
+    fn default() -> Self {
+        Self { millis: 1000 } // 1 second default
+    }
+}
 ```
 
 **Key Design Decisions:**
 
-1. **Simple Schema**: Only name → greeting message
-2. **Domain Validation**: Rich types with business rules validation
+1. **Simple Schema**: Unary greeting + streaming time updates
+2. **Domain Validation**: Rich types with business rules validation for both unary and streaming
 3. **Separation**: Domain models separate from protobuf transport models
 4. **Fail Fast**: Validation at domain boundaries using `anyhow::Result`
-5. **No Complex Types**: Start with strings, no nested structures
+5. **Streaming Support**: Server-side time streaming with configurable intervals
 
 **Validation Rules (DDD):**
 - **Name**: Non-empty, max 100 chars, no control characters
