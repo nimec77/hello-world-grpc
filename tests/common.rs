@@ -20,6 +20,7 @@ use hello_world_grpc::utils::{start_health_server, SimpleMetrics};
 ///
 /// Manages the lifecycle of a gRPC server instance for testing purposes.
 /// Automatically allocates free ports and handles server startup/shutdown.
+#[allow(dead_code)]
 pub struct TestServer {
     pub grpc_addr: SocketAddr,
     pub health_port: u16,
@@ -102,11 +103,13 @@ impl TestServer {
     }
 
     /// Get the health check port
+    #[allow(dead_code)]
     pub fn health_port(&self) -> u16 {
         self.health_port
     }
 
     /// Get the HTTP health check URL
+    #[allow(dead_code)]
     pub fn health_url(&self) -> String {
         format!("http://127.0.0.1:{}/health", self.health_port)
     }
@@ -193,11 +196,13 @@ impl StreamingClient {
     }
 
     /// Create a streaming client from an existing TestServer
+    #[allow(dead_code)]
     pub async fn from_test_server(server: &TestServer) -> Result<Self> {
         Self::connect(server.grpc_address()).await
     }
 
     /// Start a time stream and return the stream handle
+    #[allow(dead_code)]
     pub async fn start_time_stream(&mut self) -> Result<tonic::Streaming<TimeResponse>> {
         let request = tonic::Request::new(TimeRequest {});
         let response = self.client.stream_time(request).await?;
@@ -205,12 +210,14 @@ impl StreamingClient {
     }
 
     /// Get the underlying client for other operations (like say_hello)
+    #[allow(dead_code)]
     pub fn client(&mut self) -> &mut GreeterClient<Channel> {
         &mut self.client
     }
 }
 
 /// Helper for collecting multiple messages from a stream with timeout
+#[allow(dead_code)]
 pub async fn collect_stream_messages(
     stream: &mut tonic::Streaming<TimeResponse>,
     count: usize,
@@ -247,6 +254,7 @@ pub async fn collect_stream_messages(
 }
 
 /// Helper for testing concurrent streaming clients
+#[allow(dead_code)]
 pub async fn create_concurrent_streaming_clients(
     server_addr: SocketAddr,
     client_count: usize,
@@ -267,6 +275,7 @@ pub async fn create_concurrent_streaming_clients(
 }
 
 /// Helper to validate RFC3339 timestamp format
+#[allow(dead_code)]
 pub fn validate_rfc3339_timestamp(timestamp: &str) -> bool {
     // Basic RFC3339 format validation
     timestamp.len() >= 20
@@ -275,6 +284,7 @@ pub fn validate_rfc3339_timestamp(timestamp: &str) -> bool {
 }
 
 /// Performance test helper - measures stream throughput and timing
+#[allow(dead_code)]
 pub struct StreamPerformanceMonitor {
     start_time: std::time::Instant,
     message_count: usize,
@@ -282,6 +292,7 @@ pub struct StreamPerformanceMonitor {
     last_message_time: Option<std::time::Instant>,
 }
 
+#[allow(dead_code)]
 impl StreamPerformanceMonitor {
     pub fn new() -> Self {
         Self {
@@ -336,6 +347,12 @@ impl StreamPerformanceMonitor {
 
     pub fn total_duration(&self) -> Duration {
         self.start_time.elapsed()
+    }
+}
+
+impl Default for StreamPerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
