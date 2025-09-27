@@ -28,6 +28,9 @@ async fn main() -> Result<()> {
         health_port = config.server.health_port,
         log_level = %config.logging.level,
         log_format = %config.logging.format,
+        streaming_interval_seconds = config.streaming.interval_seconds,
+        streaming_max_connections = config.streaming.max_connections,
+        streaming_timeout_seconds = config.streaming.timeout_seconds,
         version = env!("CARGO_PKG_VERSION"),
         "Starting Hello World gRPC Server with configuration"
     );

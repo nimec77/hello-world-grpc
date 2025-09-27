@@ -76,6 +76,7 @@ impl FromStr for LogLevel {
 pub struct AppConfig {
     pub server: ServerConfig,
     pub logging: LoggingConfig,
+    pub streaming: StreamingConfig,
 }
 
 /// Server-related configuration
@@ -92,6 +93,14 @@ pub struct LoggingConfig {
     pub format: LogFormat,
 }
 
+/// Streaming-related configuration
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct StreamingConfig {
+    pub interval_seconds: u64,
+    pub max_connections: u32,
+    pub timeout_seconds: u64,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -102,6 +111,11 @@ impl Default for AppConfig {
             logging: LoggingConfig {
                 level: LogLevel::Info,
                 format: LogFormat::Pretty,
+            },
+            streaming: StreamingConfig {
+                interval_seconds: 1,
+                max_connections: 100,
+                timeout_seconds: 300,
             },
         }
     }
@@ -123,6 +137,40 @@ impl AppConfig {
             anyhow::bail!(
                 "Health port must be >= 1024, got: {}",
                 self.server.health_port
+            );
+        }
+
+        // Validate streaming configuration
+        if self.streaming.interval_seconds == 0 {
+            anyhow::bail!("Streaming interval must be > 0 seconds, got: 0");
+        }
+
+        if self.streaming.interval_seconds > 3600 {
+            anyhow::bail!(
+                "Streaming interval too large (max 3600s/1h), got: {}s",
+                self.streaming.interval_seconds
+            );
+        }
+
+        if self.streaming.max_connections == 0 {
+            anyhow::bail!("Max connections must be > 0, got: 0");
+        }
+
+        if self.streaming.max_connections > 10000 {
+            anyhow::bail!(
+                "Max connections too large (max 10000), got: {}",
+                self.streaming.max_connections
+            );
+        }
+
+        if self.streaming.timeout_seconds == 0 {
+            anyhow::bail!("Timeout must be > 0 seconds, got: 0");
+        }
+
+        if self.streaming.timeout_seconds > 86400 {
+            anyhow::bail!(
+                "Timeout too large (max 86400s/24h), got: {}s",
+                self.streaming.timeout_seconds
             );
         }
 
@@ -332,6 +380,80 @@ mod tests {
     }
 
     #[test]
+    fn test_streaming_config_validation() {
+        // Valid streaming config should pass
+        let mut config = AppConfig {
+            server: ServerConfig {
+                grpc_address: "127.0.0.1:50051".to_string(),
+                health_port: 8081,
+            },
+            logging: LoggingConfig {
+                level: LogLevel::Info,
+                format: LogFormat::Pretty,
+            },
+            streaming: StreamingConfig {
+                interval_seconds: 1,
+                max_connections: 100,
+                timeout_seconds: 300,
+            },
+        };
+        assert!(config.validate().is_ok());
+
+        // Test interval validation
+        config.streaming.interval_seconds = 0;
+        assert!(config.validate().is_err());
+
+        config.streaming.interval_seconds = 3601;
+        assert!(config.validate().is_err());
+
+        config.streaming.interval_seconds = 1; // Reset
+
+        // Test max_connections validation
+        config.streaming.max_connections = 0;
+        assert!(config.validate().is_err());
+
+        config.streaming.max_connections = 10001;
+        assert!(config.validate().is_err());
+
+        config.streaming.max_connections = 100; // Reset
+
+        // Test timeout validation
+        config.streaming.timeout_seconds = 0;
+        assert!(config.validate().is_err());
+
+        config.streaming.timeout_seconds = 86401;
+        assert!(config.validate().is_err());
+
+        // Edge cases that should be valid
+        config.streaming = StreamingConfig {
+            interval_seconds: 1, // minimum
+            max_connections: 1,  // minimum
+            timeout_seconds: 1,  // minimum
+        };
+        assert!(config.validate().is_ok());
+
+        config.streaming = StreamingConfig {
+            interval_seconds: 3600, // maximum
+            max_connections: 10000, // maximum
+            timeout_seconds: 86400, // maximum
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_streaming_config_defaults() {
+        let config = AppConfig::default();
+
+        // Verify default streaming values
+        assert_eq!(config.streaming.interval_seconds, 1);
+        assert_eq!(config.streaming.max_connections, 100);
+        assert_eq!(config.streaming.timeout_seconds, 300);
+
+        // Defaults should be valid
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
     fn test_environment_variable_overrides() {
         // Set environment variables - test multiple patterns
         // Pattern from earlier test that worked: APP__test_value
@@ -339,6 +461,9 @@ mod tests {
         std::env::set_var("APP__LOGGING__FORMAT", "json");
         std::env::set_var("APP__SERVER__GRPC_ADDRESS", "0.0.0.0:9999");
         std::env::set_var("APP__SERVER__HEALTH_PORT", "9090");
+        std::env::set_var("APP__STREAMING__INTERVAL_SECONDS", "5");
+        std::env::set_var("APP__STREAMING__MAX_CONNECTIONS", "200");
+        std::env::set_var("APP__STREAMING__TIMEOUT_SECONDS", "600");
 
         // Debug: Print all env vars with APP prefix
         println!("Environment variables with APP prefix:");
@@ -400,10 +525,27 @@ mod tests {
             "Log format not overridden"
         );
 
+        // Test streaming configuration overrides
+        assert_eq!(
+            config.streaming.interval_seconds, 5,
+            "Streaming interval not overridden"
+        );
+        assert_eq!(
+            config.streaming.max_connections, 200,
+            "Streaming max connections not overridden"
+        );
+        assert_eq!(
+            config.streaming.timeout_seconds, 600,
+            "Streaming timeout not overridden"
+        );
+
         // Clean up
         std::env::remove_var("APP__LOGGING__LEVEL");
         std::env::remove_var("APP__LOGGING__FORMAT");
         std::env::remove_var("APP__SERVER__GRPC_ADDRESS");
         std::env::remove_var("APP__SERVER__HEALTH_PORT");
+        std::env::remove_var("APP__STREAMING__INTERVAL_SECONDS");
+        std::env::remove_var("APP__STREAMING__MAX_CONNECTIONS");
+        std::env::remove_var("APP__STREAMING__TIMEOUT_SECONDS");
     }
 }

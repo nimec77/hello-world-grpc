@@ -9,3 +9,16 @@ health_port = 8081
 [logging]
 level = "info"
 format = "pretty"
+
+[streaming]
+# Time interval between stream updates (in seconds)
+# Valid range: 1-3600 seconds (1 second to 1 hour)
+interval_seconds = 1
+
+# Maximum number of concurrent streaming connections
+# Valid range: 1-10000 connections
+max_connections = 100
+
+# Timeout for streaming connections (in seconds)
+# Valid range: 1-86400 seconds (1 second to 24 hours)
+timeout_seconds = 300

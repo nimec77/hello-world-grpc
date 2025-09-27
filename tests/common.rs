@@ -7,7 +7,9 @@ use tonic::transport::{Channel, Endpoint};
 use tonic_health::server::health_reporter;
 use tracing::info;
 
-use hello_world_grpc::config::{AppConfig, LogFormat, LogLevel, LoggingConfig, ServerConfig};
+use hello_world_grpc::config::{
+    AppConfig, LogFormat, LogLevel, LoggingConfig, ServerConfig, StreamingConfig,
+};
 use hello_world_grpc::services::hello_world::{
     greeter_client::GreeterClient, greeter_server::GreeterServer, GreeterService,
 };
@@ -119,6 +121,11 @@ pub fn test_config() -> AppConfig {
         logging: LoggingConfig {
             level: LogLevel::Info,
             format: LogFormat::Pretty, // Pretty format for test output
+        },
+        streaming: StreamingConfig {
+            interval_seconds: 1,
+            max_connections: 100,
+            timeout_seconds: 300,
         },
     }
 }
