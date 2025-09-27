@@ -325,16 +325,16 @@
 ## 🕐 Phase 7: Time Streaming Feature
 *Goal: Add server-side streaming gRPC endpoint for real-time time updates*
 
-### Iteration 7.1: Protocol Buffer Schema Extension ⏳ NOT STARTED
-- [ ] Extend `proto/hello_world.proto` with streaming RPC:
+### Iteration 7.1: Protocol Buffer Schema Extension ✅ COMPLETED
+- [x] Extend `proto/hello_world.proto` with streaming RPC:
   - Add `StreamTime` RPC method with server-side streaming
   - Create `TimeRequest` message (empty - simple subscription)
   - Create `TimeResponse` message with timestamp field (RFC3339 format)
-  - Extend existing `Greeter` service or create new service
-- [ ] Build system automatically handles protobuf code generation
-- [ ] Verify protobuf compilation and code generation
+  - Extend existing `Greeter` service (decision made)
+- [x] Build system automatically handles protobuf code generation
+- [x] Verify protobuf compilation and code generation
 
-**Testing**: `cargo build` should generate streaming gRPC code without errors
+**Testing**: ✅ `cargo build` generates streaming gRPC code correctly (compilation error expected until service implementation)
 
 **Design Decisions Needed**:
 - Extend existing `Greeter` service vs create new `TimeService`

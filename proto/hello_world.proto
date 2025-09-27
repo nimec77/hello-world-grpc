@@ -6,8 +6,11 @@ package hello_world;
 // Implements basic greeting functionality with name validation
 
 service Greeter {
-  // Sends a greeting
+  // Sends a greeting (unary RPC)
   rpc SayHello (HelloRequest) returns (HelloReply);
+  
+  // Streams current time updates (server-side streaming RPC)
+  rpc StreamTime (TimeRequest) returns (stream TimeResponse);
 }
 
 // The request message containing the user's name
@@ -18,4 +21,14 @@ message HelloRequest {
 // The response message containing the greetings
 message HelloReply {
   string message = 1;
+}
+
+// Time streaming request (empty for simple subscription)
+message TimeRequest {
+  // Empty message - simple subscription model
+}
+
+// Time streaming response containing RFC3339 timestamp
+message TimeResponse {
+  string timestamp = 1;  // Current time in RFC3339 format
 }
