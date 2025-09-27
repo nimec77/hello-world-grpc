@@ -149,22 +149,21 @@ impl greeter_server::Greeter for GreeterService {
         let stream_addr_for_map = client_info.addr.clone();
 
         // Create the time streaming generator
-        let time_stream = IntervalStream::new(time::interval(interval_duration))
-            .map(move |_| {
-                let snapshot = TimeSnapshot::now();
-                let response = TimeResponse {
-                    timestamp: snapshot.to_rfc3339(),
-                };
+        let time_stream = IntervalStream::new(time::interval(interval_duration)).map(move |_| {
+            let snapshot = TimeSnapshot::now();
+            let response = TimeResponse {
+                timestamp: snapshot.to_rfc3339(),
+            };
 
-                info!(
-                    stream_id = %stream_id_for_map,
-                    client_addr = %stream_addr_for_map,
-                    timestamp = %snapshot.to_rfc3339(),
-                    "Streaming time update"
-                );
+            info!(
+                stream_id = %stream_id_for_map,
+                client_addr = %stream_addr_for_map,
+                timestamp = %snapshot.to_rfc3339(),
+                "Streaming time update"
+            );
 
-                Ok(response)
-            });
+            Ok(response)
+        });
 
         // Box the stream for type compatibility
         let response_stream: TimeStream = Box::pin(time_stream);
@@ -258,14 +257,24 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify stream started metric was recorded
-        assert_eq!(metrics.streams_started.load(std::sync::atomic::Ordering::Relaxed), 1);
-        assert_eq!(metrics.active_streams.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(
+            metrics
+                .streams_started
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+        assert_eq!(
+            metrics
+                .active_streams
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
     }
 
     #[tokio::test]
     async fn test_stream_time_response_format() {
         use tokio_stream::StreamExt;
-        
+
         let metrics = SimpleMetrics::new();
         let service = GreeterService::new(metrics);
         let request = Request::new(TimeRequest {});
@@ -275,12 +284,12 @@ mod tests {
 
         // Get first time response
         let first_response = stream.next().await.unwrap().unwrap();
-        
+
         // Verify it's a valid RFC3339 timestamp
         let timestamp = &first_response.timestamp;
         assert!(timestamp.contains("T"));
         assert!(timestamp.ends_with("Z") || timestamp.contains("+"));
-        
+
         // Should be able to parse as DateTime
         use chrono::DateTime;
         let parsed = DateTime::parse_from_rfc3339(timestamp);
@@ -289,9 +298,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_time_multiple_messages() {
-        use tokio_stream::StreamExt;
         use tokio::time::{timeout, Duration};
-        
+        use tokio_stream::StreamExt;
+
         let metrics = SimpleMetrics::new();
         let service = GreeterService::new(metrics);
         let request = Request::new(TimeRequest {});
@@ -304,17 +313,17 @@ mod tests {
         for _ in 0..3 {
             let message = timeout(Duration::from_secs(2), stream.next()).await;
             assert!(message.is_ok()); // Should not timeout
-            
+
             let time_response = message.unwrap().unwrap().unwrap();
             messages.push(time_response.timestamp);
         }
 
         assert_eq!(messages.len(), 3);
-        
+
         // All should be different timestamps
         assert_ne!(messages[0], messages[1]);
         assert_ne!(messages[1], messages[2]);
-        
+
         // All should be valid RFC3339
         for timestamp in messages {
             assert!(timestamp.contains("T"));
@@ -326,7 +335,7 @@ mod tests {
     async fn test_stream_time_uses_domain_types() {
         // This test verifies that the streaming uses our domain types internally
         use crate::{StreamInterval, TimeSnapshot};
-        
+
         let metrics = SimpleMetrics::new();
         let service = GreeterService::new(metrics);
         let request = Request::new(TimeRequest {});
@@ -337,7 +346,7 @@ mod tests {
         // Verify domain types work correctly
         let interval = StreamInterval::default();
         assert_eq!(interval.as_millis(), 1000); // 1 second default
-        
+
         let snapshot = TimeSnapshot::now();
         let rfc3339 = snapshot.to_rfc3339();
         assert!(rfc3339.len() >= 20); // Valid RFC3339 format

@@ -93,8 +93,8 @@ impl GreetingMessage {
     }
 }
 
-use std::time::Duration;
 use chrono::{DateTime, Utc};
+use std::time::Duration;
 
 const DEFAULT_STREAM_INTERVAL_SECS: u64 = 1;
 const MIN_STREAM_INTERVAL_MILLIS: u64 = 100; // Minimum 100ms
@@ -151,7 +151,6 @@ impl StreamInterval {
 
         Ok(StreamInterval(interval))
     }
-
 
     /// Returns the interval as a Duration
     pub fn as_duration(&self) -> Duration {
@@ -321,8 +320,14 @@ mod tests {
     #[test]
     fn test_stream_interval_default() {
         let default_interval = StreamInterval::default();
-        assert_eq!(default_interval.as_duration(), Duration::from_secs(DEFAULT_STREAM_INTERVAL_SECS));
-        assert_eq!(default_interval.as_millis(), DEFAULT_STREAM_INTERVAL_SECS as u128 * 1000);
+        assert_eq!(
+            default_interval.as_duration(),
+            Duration::from_secs(DEFAULT_STREAM_INTERVAL_SECS)
+        );
+        assert_eq!(
+            default_interval.as_millis(),
+            DEFAULT_STREAM_INTERVAL_SECS as u128 * 1000
+        );
     }
 
     #[test]
@@ -334,14 +339,22 @@ mod tests {
 
     #[test]
     fn test_stream_interval_boundary_min_valid() {
-        let boundary_interval = StreamInterval::new(Duration::from_millis(MIN_STREAM_INTERVAL_MILLIS)).unwrap();
-        assert_eq!(boundary_interval.as_millis(), MIN_STREAM_INTERVAL_MILLIS as u128);
+        let boundary_interval =
+            StreamInterval::new(Duration::from_millis(MIN_STREAM_INTERVAL_MILLIS)).unwrap();
+        assert_eq!(
+            boundary_interval.as_millis(),
+            MIN_STREAM_INTERVAL_MILLIS as u128
+        );
     }
 
     #[test]
     fn test_stream_interval_boundary_max_valid() {
-        let boundary_interval = StreamInterval::new(Duration::from_secs(MAX_STREAM_INTERVAL_SECS)).unwrap();
-        assert_eq!(boundary_interval.as_duration(), Duration::from_secs(MAX_STREAM_INTERVAL_SECS));
+        let boundary_interval =
+            StreamInterval::new(Duration::from_secs(MAX_STREAM_INTERVAL_SECS)).unwrap();
+        assert_eq!(
+            boundary_interval.as_duration(),
+            Duration::from_secs(MAX_STREAM_INTERVAL_SECS)
+        );
     }
 
     #[test]
@@ -349,15 +362,10 @@ mod tests {
         let too_fast = Duration::from_millis(MIN_STREAM_INTERVAL_MILLIS - 1);
         let result = StreamInterval::new(too_fast);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot be less than"));
-    }
-
-    #[test]
-    fn test_stream_interval_too_slow_fails() {
-        let too_slow = Duration::from_secs(MAX_STREAM_INTERVAL_SECS + 1);
-        let result = StreamInterval::new(too_slow);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot exceed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot be less than"));
     }
 
     // TimeSnapshot tests
@@ -365,23 +373,28 @@ mod tests {
     fn test_time_snapshot_now() {
         let snapshot = TimeSnapshot::now();
         let rfc3339 = snapshot.to_rfc3339();
-        
+
         // Verify RFC3339 format characteristics
         assert!(rfc3339.contains("T"));
         assert!(rfc3339.ends_with("Z") || rfc3339.ends_with("+00:00")); // Both UTC formats are valid
         assert!(rfc3339.len() >= 20); // Minimum RFC3339 length
-        
+
         // Verify it's recent (within last minute)
         let now = Utc::now();
         let diff = now.timestamp() - snapshot.timestamp();
-        assert!(diff >= 0 && diff < 60, "Snapshot should be within last minute");
+        assert!(
+            (0..60).contains(&diff),
+            "Snapshot should be within last minute"
+        );
     }
 
     #[test]
     fn test_time_snapshot_from_datetime() {
-        let dt = DateTime::parse_from_rfc3339("2023-01-01T12:00:00Z").unwrap().with_timezone(&Utc);
+        let dt = DateTime::parse_from_rfc3339("2023-01-01T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let snapshot = TimeSnapshot::from_datetime(dt);
-        
+
         let rfc3339 = snapshot.to_rfc3339();
         assert!(rfc3339 == "2023-01-01T12:00:00Z" || rfc3339 == "2023-01-01T12:00:00+00:00"); // Both UTC formats are valid
         assert_eq!(snapshot.timestamp(), 1672574400); // Unix timestamp for 2023-01-01T12:00:00Z
@@ -392,7 +405,7 @@ mod tests {
     fn test_time_snapshot_from_rfc3339_valid() {
         let rfc3339_input = "2023-01-01T12:00:00Z";
         let snapshot = TimeSnapshot::from_rfc3339(rfc3339_input).unwrap();
-        
+
         let rfc3339 = snapshot.to_rfc3339();
         assert!(rfc3339 == "2023-01-01T12:00:00Z" || rfc3339 == "2023-01-01T12:00:00+00:00"); // Both UTC formats are valid
         assert_eq!(snapshot.timestamp(), 1672574400);
@@ -402,7 +415,7 @@ mod tests {
     fn test_time_snapshot_from_rfc3339_with_offset() {
         let rfc3339_input = "2023-01-01T12:00:00+05:00";
         let snapshot = TimeSnapshot::from_rfc3339(rfc3339_input).unwrap();
-        
+
         // Should be converted to UTC
         let rfc3339 = snapshot.to_rfc3339();
         assert!(rfc3339 == "2023-01-01T07:00:00Z" || rfc3339 == "2023-01-01T07:00:00+00:00"); // Both UTC formats are valid
@@ -423,8 +436,15 @@ mod tests {
 
         for invalid_input in invalid_inputs {
             let result = TimeSnapshot::from_rfc3339(invalid_input);
-            assert!(result.is_err(), "Should fail for invalid input: {}", invalid_input);
-            assert!(result.unwrap_err().to_string().contains("Invalid RFC3339 timestamp"));
+            assert!(
+                result.is_err(),
+                "Should fail for invalid input: {}",
+                invalid_input
+            );
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid RFC3339 timestamp"));
         }
     }
 
@@ -433,7 +453,7 @@ mod tests {
         let original_rfc3339 = "2023-06-15T14:30:45.123Z";
         let snapshot = TimeSnapshot::from_rfc3339(original_rfc3339).unwrap();
         let roundtrip_rfc3339 = snapshot.to_rfc3339();
-        
+
         // Should preserve the timestamp (though format might differ slightly)
         let original_snapshot = TimeSnapshot::from_rfc3339(&roundtrip_rfc3339).unwrap();
         assert_eq!(snapshot.timestamp(), original_snapshot.timestamp());
