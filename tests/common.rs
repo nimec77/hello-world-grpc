@@ -11,7 +11,8 @@ use hello_world_grpc::config::{
     AppConfig, LogFormat, LogLevel, LoggingConfig, ServerConfig, StreamingConfig,
 };
 use hello_world_grpc::services::hello_world::{
-    greeter_client::GreeterClient, greeter_server::GreeterServer, GreeterService,
+    greeter_client::GreeterClient, greeter_server::GreeterServer, GreeterService, TimeRequest,
+    TimeResponse,
 };
 use hello_world_grpc::utils::{start_health_server, SimpleMetrics};
 
@@ -168,6 +169,174 @@ pub fn init_test_logging() {
             .with(fmt::layer().with_test_writer().pretty().with_target(false))
             .init();
     });
+}
+
+/// Streaming client wrapper for easier testing
+pub struct StreamingClient {
+    client: GreeterClient<Channel>,
+}
+
+impl StreamingClient {
+    /// Create a new streaming client connected to the given address
+    pub async fn connect(addr: SocketAddr) -> Result<Self> {
+        let endpoint = Endpoint::from_shared(format!("http://{}", addr))
+            .context("Failed to create endpoint")?;
+
+        let channel = endpoint
+            .connect_timeout(Duration::from_secs(5))
+            .connect()
+            .await
+            .context("Failed to connect to server")?;
+
+        let client = GreeterClient::new(channel);
+        Ok(StreamingClient { client })
+    }
+
+    /// Create a streaming client from an existing TestServer
+    pub async fn from_test_server(server: &TestServer) -> Result<Self> {
+        Self::connect(server.grpc_address()).await
+    }
+
+    /// Start a time stream and return the stream handle
+    pub async fn start_time_stream(&mut self) -> Result<tonic::Streaming<TimeResponse>> {
+        let request = tonic::Request::new(TimeRequest {});
+        let response = self.client.stream_time(request).await?;
+        Ok(response.into_inner())
+    }
+
+    /// Get the underlying client for other operations (like say_hello)
+    pub fn client(&mut self) -> &mut GreeterClient<Channel> {
+        &mut self.client
+    }
+}
+
+/// Helper for collecting multiple messages from a stream with timeout
+pub async fn collect_stream_messages(
+    stream: &mut tonic::Streaming<TimeResponse>,
+    count: usize,
+    timeout_per_message: Duration,
+) -> Result<Vec<TimeResponse>> {
+    use tokio::time::timeout;
+    use tokio_stream::StreamExt;
+
+    let mut messages = Vec::new();
+    for i in 0..count {
+        match timeout(timeout_per_message, stream.next()).await {
+            Ok(Some(Ok(message))) => {
+                messages.push(message);
+            }
+            Ok(Some(Err(e))) => {
+                return Err(anyhow::anyhow!("Stream error on message {}: {}", i, e));
+            }
+            Ok(None) => {
+                return Err(anyhow::anyhow!(
+                    "Stream ended unexpectedly after {} messages",
+                    i
+                ));
+            }
+            Err(_) => {
+                return Err(anyhow::anyhow!(
+                    "Timeout waiting for message {} after {}ms",
+                    i,
+                    timeout_per_message.as_millis()
+                ));
+            }
+        }
+    }
+    Ok(messages)
+}
+
+/// Helper for testing concurrent streaming clients
+pub async fn create_concurrent_streaming_clients(
+    server_addr: SocketAddr,
+    client_count: usize,
+) -> Result<Vec<StreamingClient>> {
+    let mut clients = Vec::new();
+
+    for i in 0..client_count {
+        match StreamingClient::connect(server_addr).await {
+            Ok(client) => clients.push(client),
+            Err(e) => return Err(anyhow::anyhow!("Failed to create client {}: {}", i, e)),
+        }
+
+        // Small delay between client connections to avoid overwhelming the server
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    Ok(clients)
+}
+
+/// Helper to validate RFC3339 timestamp format
+pub fn validate_rfc3339_timestamp(timestamp: &str) -> bool {
+    // Basic RFC3339 format validation
+    timestamp.len() >= 20
+        && timestamp.contains("T")
+        && (timestamp.ends_with("Z") || timestamp.contains("+") || timestamp.contains("-"))
+}
+
+/// Performance test helper - measures stream throughput and timing
+pub struct StreamPerformanceMonitor {
+    start_time: std::time::Instant,
+    message_count: usize,
+    total_timing_drift: Duration,
+    last_message_time: Option<std::time::Instant>,
+}
+
+impl StreamPerformanceMonitor {
+    pub fn new() -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+            message_count: 0,
+            total_timing_drift: Duration::ZERO,
+            last_message_time: None,
+        }
+    }
+
+    pub fn record_message(&mut self) {
+        let now = std::time::Instant::now();
+        self.message_count += 1;
+
+        if let Some(last_time) = self.last_message_time {
+            // Measure time since last message (should be ~1 second for default interval)
+            let actual_interval = now.duration_since(last_time);
+            let expected_interval = Duration::from_secs(1);
+
+            let drift = if actual_interval > expected_interval {
+                actual_interval - expected_interval
+            } else {
+                expected_interval - actual_interval
+            };
+
+            self.total_timing_drift += drift;
+        }
+
+        self.last_message_time = Some(now);
+    }
+
+    pub fn messages_per_second(&self) -> f64 {
+        let elapsed = self.start_time.elapsed().as_secs_f64();
+        if elapsed > 0.0 {
+            self.message_count as f64 / elapsed
+        } else {
+            0.0
+        }
+    }
+
+    pub fn average_timing_drift_ms(&self) -> f64 {
+        if self.message_count > 1 {
+            self.total_timing_drift.as_millis() as f64 / (self.message_count as f64 - 1.0)
+        } else {
+            0.0
+        }
+    }
+
+    pub fn total_messages(&self) -> usize {
+        self.message_count
+    }
+
+    pub fn total_duration(&self) -> Duration {
+        self.start_time.elapsed()
+    }
 }
 
 #[cfg(test)]

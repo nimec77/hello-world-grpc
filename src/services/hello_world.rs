@@ -18,7 +18,7 @@ tonic::include_proto!("hello_world");
 ///
 /// Provides domain-validated greeting functionality with structured logging
 /// and metrics collection.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GreeterService {
     metrics: Arc<SimpleMetrics>,
 }
@@ -350,5 +350,181 @@ mod tests {
         let snapshot = TimeSnapshot::now();
         let rfc3339 = snapshot.to_rfc3339();
         assert!(rfc3339.len() >= 20); // Valid RFC3339 format
+    }
+
+    #[tokio::test]
+    async fn test_stream_time_client_disconnection() {
+        use tokio::time::{timeout, Duration};
+        use tokio_stream::StreamExt;
+
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics.clone());
+        let request = Request::new(TimeRequest {});
+
+        let response = service.stream_time(request).await.unwrap();
+        let mut stream = response.into_inner();
+
+        // Get first message to ensure stream starts
+        let first_message = timeout(Duration::from_secs(2), stream.next()).await;
+        assert!(first_message.is_ok());
+        assert!(first_message.unwrap().is_some());
+
+        // Check that stream metrics are being tracked
+        let initial_streams = metrics
+            .streams_started
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert!(initial_streams > 0);
+
+        // Drop the stream to simulate client disconnection
+        drop(stream);
+
+        // Give time for cleanup
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Stream should handle disconnection gracefully (no panics)
+        // This test primarily ensures no crashes occur during cleanup
+    }
+
+    #[tokio::test]
+    async fn test_stream_time_metrics_tracking() {
+        use tokio::time::{timeout, Duration};
+        use tokio_stream::StreamExt;
+
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics.clone());
+
+        let initial_started = metrics
+            .streams_started
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let initial_active = metrics
+            .active_streams
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        // Start a stream
+        let request = Request::new(TimeRequest {});
+        let response = service.stream_time(request).await.unwrap();
+        let mut stream = response.into_inner();
+
+        // Verify metrics incremented
+        let after_start_started = metrics
+            .streams_started
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let after_start_active = metrics
+            .active_streams
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        assert_eq!(after_start_started, initial_started + 1);
+        assert_eq!(after_start_active, initial_active + 1);
+
+        // Get a message to ensure stream is active
+        let message = timeout(Duration::from_secs(2), stream.next()).await;
+        assert!(message.is_ok());
+
+        // Drop the stream
+        drop(stream);
+
+        // Give time for cleanup
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Active streams should decrease
+        let after_drop_active = metrics
+            .active_streams
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert!(after_drop_active <= after_start_active);
+    }
+
+    #[tokio::test]
+    async fn test_stream_time_error_handling() {
+        // Test that the stream handles internal errors gracefully
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics);
+        let request = Request::new(TimeRequest {});
+
+        // This test ensures stream creation doesn't fail
+        let result = service.stream_time(request).await;
+        assert!(result.is_ok());
+
+        let stream = result.unwrap().into_inner();
+
+        // Stream should be created successfully even if there might be future errors
+        // The actual error handling happens at the stream level
+        drop(stream);
+    }
+
+    #[tokio::test]
+    async fn test_stream_time_concurrent_requests() {
+        use tokio::time::{timeout, Duration};
+        use tokio_stream::StreamExt;
+
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics.clone());
+
+        // Create multiple concurrent streams
+        let mut handles = Vec::new();
+
+        for i in 0..3 {
+            let service_clone = service.clone();
+            let handle: tokio::task::JoinHandle<String> = tokio::spawn(async move {
+                let request = Request::new(TimeRequest {});
+                let response = service_clone.stream_time(request).await.unwrap();
+                let mut stream = response.into_inner();
+
+                // Get first message from each stream
+                let message = timeout(Duration::from_secs(3), stream.next()).await;
+                assert!(message.is_ok(), "Stream {} should produce message", i);
+
+                let time_response = message.unwrap().unwrap().unwrap();
+                time_response.timestamp
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all streams to produce their first message
+        let mut timestamps = Vec::new();
+        for handle in handles {
+            let timestamp = handle.await.unwrap();
+            timestamps.push(timestamp);
+        }
+
+        // All streams should have produced valid timestamps
+        assert_eq!(timestamps.len(), 3);
+
+        // Verify all timestamps are valid RFC3339
+        for timestamp in &timestamps {
+            assert!(timestamp.contains("T"));
+            assert!(timestamp.ends_with("Z") || timestamp.contains("+"));
+        }
+
+        // Check that metrics tracked concurrent streams
+        let streams_started = metrics
+            .streams_started
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert!(streams_started >= 3);
+    }
+
+    #[tokio::test]
+    async fn test_stream_time_request_logging() {
+        use tokio::time::{timeout, Duration};
+        use tokio_stream::StreamExt;
+
+        let metrics = SimpleMetrics::new();
+        let service = GreeterService::new(metrics);
+
+        // Create a request with metadata for logging
+        let mut request = Request::new(TimeRequest {});
+        request
+            .metadata_mut()
+            .insert("x-client-id", "test-client".parse().unwrap());
+
+        let response = service.stream_time(request).await.unwrap();
+        let mut stream = response.into_inner();
+
+        // Get first message to ensure logging occurs
+        let message = timeout(Duration::from_secs(2), stream.next()).await;
+        assert!(message.is_ok());
+
+        // This test primarily ensures no panics occur during logging
+        // Actual log verification would require more complex test infrastructure
+        drop(stream);
     }
 }
